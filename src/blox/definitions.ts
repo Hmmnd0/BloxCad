@@ -260,6 +260,18 @@ export const BLOX_DEFINITIONS: BloxDefinition[] = [
     isResizable: false,
     resizeAxis: 'none'
   },
+  {
+    id: 'fixture-vanity',
+    name: 'Bathroom Vanity',
+    category: 'Fixtures',
+    description: '36"×21" wall-hung vanity with sink',
+    defaultWidth: 3,
+    defaultHeight: 1.75,
+    isResizable: true,
+    resizeAxis: 'x',
+    minWidth: 1.5,
+    widthPresets: [1.5, 2, 2.5, 3, 3.5, 4, 5, 6]
+  },
 
   // ── FURNITURE ────────────────────────────────────────────────────────────
   {
@@ -350,6 +362,18 @@ export const BLOX_DEFINITIONS: BloxDefinition[] = [
     minHeight: 1.5
   },
   {
+    id: 'furniture-dresser',
+    name: 'Dresser',
+    category: 'Furniture',
+    description: '48"×18" bedroom dresser',
+    defaultWidth: 4,
+    defaultHeight: 1.5,
+    isResizable: true,
+    resizeAxis: 'x',
+    minWidth: 2,
+    widthPresets: [2.5, 3, 4, 5, 6]
+  },
+  {
     id: 'furniture-desk',
     name: 'Desk',
     category: 'Furniture',
@@ -398,6 +422,18 @@ export const BLOX_DEFINITIONS: BloxDefinition[] = [
     resizeAxis: 'both',
     minWidth: 2,
     minHeight: 2
+  },
+  {
+    id: 'casework-bath-storage',
+    name: 'Bath Storage Cabinet',
+    category: 'Casework',
+    description: '18"×18" wall-hung bathroom storage cabinet',
+    defaultWidth: 1.5,
+    defaultHeight: 1.5,
+    isResizable: true,
+    resizeAxis: 'both',
+    minWidth: 0.75,
+    minHeight: 0.75
   },
 
   // ── STRUCTURAL ───────────────────────────────────────────────────────────

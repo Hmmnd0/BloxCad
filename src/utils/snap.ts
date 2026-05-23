@@ -130,6 +130,44 @@ export function edgeSnapThresholdFt(pixelsPerFoot: number, stageScale: number, t
   return thresholdPx / (pixelsPerFoot * stageScale)
 }
 
+/**
+ * Snaps a wall endpoint to nearby element edges on the axis that's moving.
+ * Pass the (already orthogonally-constrained) end point. Returns a potentially
+ * snapped version of that point.
+ */
+export function snapWallEndpoint(
+  start: Point,
+  constrained: Point,
+  elements: PlacedElement[],
+  thresholdFt: number
+): Point {
+  const dx = Math.abs(constrained.x - start.x)
+  const dy = Math.abs(constrained.y - start.y)
+  const isHoriz = dx >= dy
+
+  if (isHoriz) {
+    let bestX = constrained.x
+    let bestDist = thresholdFt
+    for (const el of elements) {
+      for (const target of [el.x, el.x + el.width]) {
+        const d = Math.abs(constrained.x - target)
+        if (d < bestDist) { bestDist = d; bestX = target }
+      }
+    }
+    return { x: bestX, y: constrained.y }
+  } else {
+    let bestY = constrained.y
+    let bestDist = thresholdFt
+    for (const el of elements) {
+      for (const target of [el.y, el.y + el.height]) {
+        const d = Math.abs(constrained.y - target)
+        if (d < bestDist) { bestDist = d; bestY = target }
+      }
+    }
+    return { x: constrained.x, y: bestY }
+  }
+}
+
 export interface EdgeSnapResult {
   x: number          // snapped top-left x in feet
   y: number          // snapped top-left y in feet

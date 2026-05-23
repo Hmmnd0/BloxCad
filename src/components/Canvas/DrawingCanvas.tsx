@@ -8,7 +8,7 @@ import { DimensionLayer } from './DimensionLayer'
 import { useStore, getPixelsPerFoot, getSnapFeet } from '../../store/useStore'
 import { snapToGrid, pixelsToFeet, formatFeet } from '../../utils/scale'
 import { SCALES, Scale } from '../../types'
-import { getElementSnapPoints, nearestSnapPoint, edgeSnapThresholdFt, snapOpeningToWall, WallSnapResult } from '../../utils/snap'
+import { getElementSnapPoints, nearestSnapPoint, edgeSnapThresholdFt, snapOpeningToWall, snapWallEndpoint, WallSnapResult } from '../../utils/snap'
 import { getBloxById } from '../../blox/definitions'
 import { registerStage, unregisterStage } from '../../utils/exportManager'
 import { ScaleBar } from './ScaleBar'
@@ -111,12 +111,17 @@ export function DrawingCanvas() {
   useEffect(() => {
     if (!project || centeredForProjectRef.current === project.id) return
     centeredForProjectRef.current = project.id
-    const { width, height } = sizeRef.current
-    const cx = width / 2
-    const cy = height / 2
-    setStageTransform(cx, cy, 1)
-    stageRef.current?.scale({ x: 1, y: 1 })
-    stageRef.current?.position({ x: cx, y: cy })
+    // rAF ensures the container has its final layout dimensions before we read them
+    requestAnimationFrame(() => {
+      const rect = containerRef.current?.getBoundingClientRect()
+      const width = rect?.width ?? sizeRef.current.width
+      const height = rect?.height ?? sizeRef.current.height
+      const cx = width / 2
+      const cy = height / 2
+      setStageTransform(cx, cy, 1)
+      stageRef.current?.scale({ x: 1, y: 1 })
+      stageRef.current?.position({ x: cx, y: cy })
+    })
   }, [project?.id])
 
   // ── Keyboard shortcuts (Illustrator-style) ──────────────────────────────
@@ -354,7 +359,18 @@ export function DrawingCanvas() {
       }
     }
     if (activeToolRef.current === 'dimension') setDimCursor(getSnappedFeet(pos, true))
-    if (activeToolRef.current === 'wall') setWallCursor(getSnappedFeet(pos))
+    if (activeToolRef.current === 'wall') {
+      const gridPt = getSnappedFeet(pos)
+      if (wallStartRef.current) {
+        const elements = useStore.getState().project?.elements ?? []
+        const stageScale = stageRef.current?.scaleX() ?? 1
+        const threshFt = edgeSnapThresholdFt(pxPerFtRef.current, stageScale, 20)
+        const constrained = constrainToOrthogonal(wallStartRef.current, gridPt)
+        setWallCursor(snapWallEndpoint(wallStartRef.current, constrained, elements, threshFt))
+      } else {
+        setWallCursor(gridPt)
+      }
+    }
     if (activeToolRef.current === 'rect' && rectDrawRef.current) {
       const ft = getSnappedFeet(pos)
       const draw = { ...rectDrawRef.current, endFt: ft }
@@ -436,14 +452,21 @@ export function DrawingCanvas() {
 
     // Wall tool — orthogonal chain drawing
     if (activeToolRef.current === 'wall') {
-      const snapped = getSnappedFeet(pos)
+      const gridPt = getSnappedFeet(pos)
+      const elements = useStore.getState().project?.elements ?? []
+      const stageScale = stageRef.current?.scaleX() ?? 1
+      const threshFt = edgeSnapThresholdFt(pxPerFtRef.current, stageScale, 20)
       if (!wallStartRef.current) {
+        // Snap start to nearest element corner/edge-midpoint
+        const snapPts = getElementSnapPoints(elements)
+        const snapped = nearestSnapPoint(gridPt, snapPts, threshFt) ?? gridPt
         setWallStart(snapped)
       } else {
-        const constrained = constrainToOrthogonal(wallStartRef.current, snapped)
+        const constrained = constrainToOrthogonal(wallStartRef.current, gridPt)
+        const snapped = snapWallEndpoint(wallStartRef.current, constrained, elements, threshFt)
         const start = wallStartRef.current
-        const dx = Math.abs(constrained.x - start.x)
-        const dy = Math.abs(constrained.y - start.y)
+        const dx = Math.abs(snapped.x - start.x)
+        const dy = Math.abs(snapped.y - start.y)
         if (dx < 0.25 && dy < 0.25) return // too short — ignore click
 
         const wallType = activeWallTypeRef.current
@@ -451,14 +474,14 @@ export function DrawingCanvas() {
         const isHoriz = dx >= dy
         if (isHoriz) {
           placeRef.current(wallType,
-            Math.min(start.x, constrained.x) - t / 2, start.y - t / 2,
+            Math.min(start.x, snapped.x) - t / 2, start.y - t / 2,
             dx + t, t)
         } else {
           placeRef.current(wallType,
-            start.x - t / 2, Math.min(start.y, constrained.y) - t / 2,
+            start.x - t / 2, Math.min(start.y, snapped.y) - t / 2,
             t, dy + t)
         }
-        setWallStart(constrained)
+        setWallStart(snapped)
       }
       return
     }
@@ -501,10 +524,10 @@ export function DrawingCanvas() {
     h: Math.abs(marquee.endFt.y - marquee.startFt.y) * pxPerFt
   } : null
 
-  // Wall preview: constrained rect from wallStart to wallCursor
+  // Wall preview: wallCursor is already constrained+edge-snapped when wallStart exists
   const wallPreview = activeTool === 'wall' && wallStart && wallCursor
     ? (() => {
-        const c = constrainToOrthogonal(wallStart, wallCursor)
+        const c = wallCursor  // already constrained + edge-snapped in mousemove
         const dx = Math.abs(c.x - wallStart.x)
         const dy = Math.abs(c.y - wallStart.y)
         const t = WALL_THICKNESS[activeWallType] ?? 0.5

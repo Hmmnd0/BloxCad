@@ -1003,6 +1003,135 @@ export function HumanScaleRenderer({ widthPx, heightPx }: RendererProps) {
   )
 }
 
+// ─── DRESSER ──────────────────────────────────────────────────────────────────
+
+export function DresserRenderer({ widthPx, heightPx }: RendererProps) {
+  const isLandscape = widthPx >= heightPx
+
+  if (isLandscape) {
+    // Back panel at top, drawers below
+    const backH = heightPx * 0.18
+    const frontH = heightPx - backH
+    const drawerCount = Math.max(2, Math.round(widthPx / 36))
+    const drawerW = widthPx / drawerCount
+    const handleW = Math.min(drawerW * 0.35, 18)
+    const handleH = 4
+    const drawerMidY = backH + frontH / 2
+    return (
+      <Group>
+        <Rect width={widthPx} height={heightPx} fill="white" stroke={STROKE} strokeWidth={STROKE_MED} />
+        <Rect x={0} y={0} width={widthPx} height={backH} fill="#d8d4cf" stroke={STROKE} strokeWidth={0.5} />
+        {Array.from({ length: drawerCount - 1 }, (_, i) => (
+          <Line key={i} points={[(i + 1) * drawerW, backH, (i + 1) * drawerW, heightPx]} stroke="#aaa" strokeWidth={0.6} />
+        ))}
+        {Array.from({ length: drawerCount }, (_, i) => (
+          <Rect
+            key={i}
+            x={i * drawerW + (drawerW - handleW) / 2}
+            y={drawerMidY - handleH / 2}
+            width={handleW} height={handleH}
+            fill="#bbb" stroke="#999" strokeWidth={0.5} cornerRadius={2}
+          />
+        ))}
+      </Group>
+    )
+  }
+
+  // Portrait: back at left
+  const backW = widthPx * 0.18
+  const frontW = widthPx - backW
+  const drawerCount = Math.max(2, Math.round(heightPx / 36))
+  const drawerH = heightPx / drawerCount
+  const handleH = Math.min(drawerH * 0.35, 18)
+  const handleW = 4
+  const drawerMidX = backW + frontW / 2
+  return (
+    <Group>
+      <Rect width={widthPx} height={heightPx} fill="white" stroke={STROKE} strokeWidth={STROKE_MED} />
+      <Rect x={0} y={0} width={backW} height={heightPx} fill="#d8d4cf" stroke={STROKE} strokeWidth={0.5} />
+      {Array.from({ length: drawerCount - 1 }, (_, i) => (
+        <Line key={i} points={[backW, (i + 1) * drawerH, widthPx, (i + 1) * drawerH]} stroke="#aaa" strokeWidth={0.6} />
+      ))}
+      {Array.from({ length: drawerCount }, (_, i) => (
+        <Rect
+          key={i}
+          x={drawerMidX - handleW / 2}
+          y={i * drawerH + (drawerH - handleH) / 2}
+          width={handleW} height={handleH}
+          fill="#bbb" stroke="#999" strokeWidth={0.5} cornerRadius={2}
+        />
+      ))}
+    </Group>
+  )
+}
+
+// ─── BATHROOM VANITY ──────────────────────────────────────────────────────────
+
+export function VanityRenderer({ widthPx, heightPx }: RendererProps) {
+  const isLandscape = widthPx >= heightPx
+
+  if (isLandscape) {
+    // Wall/back at top, front (user side) at bottom
+    const edgeH = heightPx * 0.14
+    const basinCx = widthPx / 2
+    const basinCy = heightPx * 0.62
+    const basinRx = Math.min(widthPx * 0.22, heightPx * 0.28)
+    const basinRy = heightPx * 0.25
+    return (
+      <Group>
+        <Rect width={widthPx} height={heightPx} fill="white" stroke={STROKE} strokeWidth={STROKE_MED} />
+        <Line points={[0, edgeH, widthPx, edgeH]} stroke={STROKE} strokeWidth={0.8} />
+        <Ellipse x={basinCx} y={basinCy} radiusX={basinRx} radiusY={basinRy}
+          fill="#f0f8ff" stroke="#888" strokeWidth={0.7} />
+        <Circle x={basinCx} y={edgeH + (basinCy - edgeH) * 0.45} radius={Math.min(widthPx * 0.04, 5)}
+          fill="#bbb" stroke={STROKE} strokeWidth={0.5} />
+      </Group>
+    )
+  }
+
+  // Portrait: wall/back at left
+  const edgeW = widthPx * 0.14
+  const basinCx = widthPx * 0.62
+  const basinCy = heightPx / 2
+  const basinRx = widthPx * 0.25
+  const basinRy = Math.min(heightPx * 0.22, widthPx * 0.28)
+  return (
+    <Group>
+      <Rect width={widthPx} height={heightPx} fill="white" stroke={STROKE} strokeWidth={STROKE_MED} />
+      <Line points={[edgeW, 0, edgeW, heightPx]} stroke={STROKE} strokeWidth={0.8} />
+      <Ellipse x={basinCx} y={basinCy} radiusX={basinRx} radiusY={basinRy}
+        fill="#f0f8ff" stroke="#888" strokeWidth={0.7} />
+      <Circle x={edgeW + (basinCx - edgeW) * 0.45} y={basinCy} radius={Math.min(heightPx * 0.04, 5)}
+        fill="#bbb" stroke={STROKE} strokeWidth={0.5} />
+    </Group>
+  )
+}
+
+// ─── BATH STORAGE CABINET ────────────────────────────────────────────────────
+
+export function BathStorageCabinetRenderer({ widthPx, heightPx }: RendererProps) {
+  const shelfCount = Math.max(1, Math.round(heightPx / 24) - 1)
+  const isLandscape = widthPx >= heightPx
+  return (
+    <Group>
+      <Rect width={widthPx} height={heightPx}
+        fill="rgba(200,200,200,0.08)" stroke={STROKE} strokeWidth={0.8} dash={[5, 3]} />
+      {isLandscape
+        ? Array.from({ length: shelfCount }, (_, i) => (
+            <Line key={i}
+              points={[3, ((i + 1) / (shelfCount + 1)) * heightPx, widthPx - 3, ((i + 1) / (shelfCount + 1)) * heightPx]}
+              stroke="#bbb" strokeWidth={0.6} />
+          ))
+        : Array.from({ length: shelfCount }, (_, i) => (
+            <Line key={i}
+              points={[3, ((i + 1) / (shelfCount + 1)) * heightPx, widthPx - 3, ((i + 1) / (shelfCount + 1)) * heightPx]}
+              stroke="#bbb" strokeWidth={0.6} />
+          ))
+      }
+    </Group>
+  )
+}
+
 // ─── REGISTRY ─────────────────────────────────────────────────────────────────
 
 type RendererComponent = React.FC<RendererProps>
@@ -1039,7 +1168,10 @@ export const RENDERERS: Record<string, RendererComponent> = {
   'furniture-chair': ChairRenderer,
   'furniture-dining-table': DiningTableRenderer,
   'furniture-coffee-table': CoffeeTableRenderer,
+  'furniture-dresser': DresserRenderer,
   'furniture-desk': DeskRenderer,
+  'fixture-vanity': VanityRenderer,
+  'casework-bath-storage': BathStorageCabinetRenderer,
   'casework-base': BaseCabinetRenderer,
   'casework-upper': UpperCabinetRenderer,
   'casework-island': KitchenIslandRenderer,
