@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { v4 as uuid } from 'uuid'
-import { Project, PlacedElement, DimensionLine, Scale, Tool, SCALES, TitleBlock, ChecklistItem, Layer } from '../types'
+import { Project, PlacedElement, DimensionLine, Scale, Tool, WallType, SCALES, TitleBlock, ChecklistItem, Layer } from '../types'
 import { getBloxById } from '../blox/definitions'
 
 const LAYER_COLORS = ['#4F9EFF', '#2ECC71', '#E74C3C', '#F1C40F', '#9B59B6', '#E67E22', '#1ABC9C', '#95A5A6']
@@ -62,6 +62,7 @@ function makeDefaultChecklist(): ChecklistItem[] {
 interface AppState {
   project: Project | null
   activeTool: Tool
+  activeWallType: WallType
   activeBloxId: string | null
   selectedElementIds: string[]
   selectedDimIds: string[]
@@ -87,6 +88,7 @@ interface AppState {
   clearSelection: () => void
   setActiveBlox: (bloxId: string | null) => void
   setActiveTool: (tool: Tool) => void
+  setActiveWallType: (type: WallType) => void
   setStageTransform: (x: number, y: number, scale: number) => void
   setShowNewProjectDialog: (show: boolean) => void
   setShowDRCPanel: (show: boolean) => void
@@ -127,6 +129,7 @@ function pushToHistory(past: Project[], project: Project): Project[] {
 export const useStore = create<AppState>((set, get) => ({
   project: null,
   activeTool: 'select',
+  activeWallType: 'wall-exterior',
   activeBloxId: null,
   selectedElementIds: [],
   selectedDimIds: [],
@@ -150,7 +153,7 @@ export const useStore = create<AppState>((set, get) => ({
 
   loadProject: (project) => {
     const defaultLayer = makeDefaultLayer()
-    const p = { dimensions: [], checklist: makeDefaultChecklist(), layers: [defaultLayer], ...project }
+    const p = { ...project, dimensions: project.dimensions ?? [], checklist: project.checklist ?? makeDefaultChecklist(), layers: project.layers ?? [defaultLayer] }
     const firstLayerId = p.layers[0]?.id ?? DEFAULT_LAYER_ID
     set({ project: p, showNewProjectDialog: false, isDirty: false, stageX: 60, stageY: 60, stageScale: 1, past: [], future: [], activeLayerId: firstLayerId })
   },
@@ -285,6 +288,7 @@ export const useStore = create<AppState>((set, get) => ({
   setActiveBlox: (bloxId) => set({ activeBloxId: bloxId, activeTool: 'select', pendingBloxWidth: null }),
   setPendingBloxWidth: (w) => set({ pendingBloxWidth: w }),
   setActiveTool: (tool) => set({ activeTool: tool, activeBloxId: null }),
+  setActiveWallType: (type) => set({ activeWallType: type, activeTool: 'wall', activeBloxId: null }),
   setStageTransform: (x, y, scale) => set({ stageX: x, stageY: y, stageScale: scale }),
   setShowNewProjectDialog: (show) => set({ showNewProjectDialog: show }),
   setShowDRCPanel: (show) => set({ showDRCPanel: show }),

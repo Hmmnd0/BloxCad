@@ -93,7 +93,7 @@ app.whenReady().then(() => {
   ipcMain.handle('save-project', async (_, { data, defaultName }) => {
     const { canceled, filePath } = await dialog.showSaveDialog({
       defaultPath: `${defaultName}.bloxcad`,
-      filters: [{ name: 'BloxCad Project', extensions: ['bloxcad'] }]
+      filters: [{ name: 'bloxCAD Project', extensions: ['bloxcad'] }]
     })
     if (!canceled && filePath) {
       writeFileSync(filePath, data, 'utf-8')
@@ -131,7 +131,7 @@ app.whenReady().then(() => {
 
   ipcMain.handle('open-project', async () => {
     const { canceled, filePaths } = await dialog.showOpenDialog({
-      filters: [{ name: 'BloxCad Project', extensions: ['bloxcad'] }],
+      filters: [{ name: 'bloxCAD Project', extensions: ['bloxcad'] }],
       properties: ['openFile']
     })
     if (!canceled && filePaths[0]) {

@@ -1,5 +1,6 @@
-import React from 'react'
-import { Tool } from '../../types'
+import React, { useRef, useState, useEffect, useCallback } from 'react'
+import { MousePointer2, Hand, PenLine, Ruler, Square, ChevronRight } from 'lucide-react'
+import { Tool, WallType } from '../../types'
 import { useStore } from '../../store/useStore'
 
 interface ToolDef {
@@ -9,105 +10,160 @@ interface ToolDef {
   icon: React.ReactNode
 }
 
-const TOOLS: ToolDef[] = [
-  {
-    id: 'select',
-    label: 'Select',
-    shortcut: 'V',
-    icon: (
-      <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
-        <path d="M4 2 L4 15 L7.5 11.5 L10 17.5 L12 16.5 L9.5 10.5 L14 10.5 Z" />
-      </svg>
-    )
-  },
-  {
-    id: 'hand',
-    label: 'Pan',
-    shortcut: 'H',
-    icon: (
-      <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
-        <rect x="7" y="8" width="2.5" height="7" rx="1.25" />
-        <rect x="10" y="6" width="2.5" height="9" rx="1.25" />
-        <rect x="13" y="7" width="2.5" height="8" rx="1.25" />
-        <rect x="4" y="10" width="2.5" height="5" rx="1.25" />
-        <rect x="4" y="14" width="11.5" height="3" rx="1.5" />
-      </svg>
-    )
-  },
-  {
-    id: 'wall',
-    label: 'Wall',
-    shortcut: 'W',
-    icon: (
-      <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5">
-        {/* Horizontal wall band */}
-        <rect x="2" y="8" width="16" height="4" fill="currentColor" opacity="0.6" stroke="none" rx="0.5" />
-        {/* Click-point dots */}
-        <circle cx="2" cy="10" r="1.5" fill="currentColor" stroke="none" />
-        <circle cx="18" cy="10" r="1.5" fill="currentColor" stroke="none" />
-        {/* Hatch lines */}
-        <line x1="5" y1="8" x2="7" y2="12" strokeWidth="0.8" stroke="white" opacity="0.5" />
-        <line x1="9" y1="8" x2="11" y2="12" strokeWidth="0.8" stroke="white" opacity="0.5" />
-        <line x1="13" y1="8" x2="15" y2="12" strokeWidth="0.8" stroke="white" opacity="0.5" />
-      </svg>
-    )
-  },
-  {
-    id: 'dimension',
-    label: 'Dimension',
-    shortcut: 'D',
-    icon: (
-      <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5">
-        <line x1="3" y1="10" x2="17" y2="10" />
-        <line x1="3" y1="7" x2="3" y2="13" />
-        <line x1="17" y1="7" x2="17" y2="13" />
-        <line x1="3" y1="14" x2="3" y2="17" strokeDasharray="1.5 1" />
-        <line x1="17" y1="14" x2="17" y2="17" strokeDasharray="1.5 1" />
-        <rect x="3" y="17" width="14" height="1.5" fill="currentColor" stroke="none" rx="0.5" />
-      </svg>
-    )
-  },
-  {
-    id: 'rect',
-    label: 'Rectangle',
-    shortcut: 'S',
-    icon: (
-      <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5">
-        <rect x="3" y="5" width="14" height="10" rx="0.5" />
-      </svg>
-    )
-  }
+const WALL_OPTIONS: { type: WallType; label: string; description: string }[] = [
+  { type: 'wall-exterior', label: 'Exterior Wall', description: '6" framed' },
+  { type: 'wall-interior', label: 'Interior Wall', description: '4½" framed' },
+  { type: 'wall-cmu',      label: 'CMU Wall',      description: '8" block' },
 ]
+
+const TOOLS: ToolDef[] = [
+  { id: 'select',    label: 'Select',    shortcut: 'V', icon: <MousePointer2 size={18} strokeWidth={1.5} /> },
+  { id: 'hand',      label: 'Pan',       shortcut: 'H', icon: <Hand          size={18} strokeWidth={1.5} /> },
+  { id: 'wall',      label: 'Wall',      shortcut: 'W', icon: <PenLine       size={18} strokeWidth={1.5} /> },
+  { id: 'dimension', label: 'Dimension', shortcut: 'D', icon: <Ruler         size={18} strokeWidth={1.5} /> },
+  { id: 'rect',      label: 'Rectangle', shortcut: 'S', icon: <Square        size={18} strokeWidth={1.5} /> },
+]
+
+const LONG_PRESS_MS = 500
+
+interface WallFlyoutProps {
+  activeWallType: WallType
+  onSelect: (type: WallType) => void
+  onClose: () => void
+}
+
+function WallFlyout({ activeWallType, onSelect, onClose }: WallFlyoutProps) {
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) onClose()
+    }
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [onClose])
+
+  return (
+    <div
+      ref={ref}
+      className="absolute left-full top-0 ml-1 z-50 bg-sidebar border border-gray-600 rounded shadow-xl py-1 min-w-[160px]"
+    >
+      {WALL_OPTIONS.map(opt => (
+        <button
+          key={opt.type}
+          onClick={() => { onSelect(opt.type); onClose() }}
+          className={`
+            w-full flex items-center gap-2 px-3 py-2 text-left text-sm transition-colors
+            ${activeWallType === opt.type
+              ? 'bg-accent text-white'
+              : 'text-gray-300 hover:bg-sidebar-hover hover:text-white'
+            }
+          `}
+        >
+          <PenLine size={14} strokeWidth={1.5} className="shrink-0" />
+          <div>
+            <div className="font-medium leading-tight">{opt.label}</div>
+            <div className="text-[10px] opacity-60 leading-tight">{opt.description}</div>
+          </div>
+        </button>
+      ))}
+    </div>
+  )
+}
 
 interface ToolButtonProps {
   tool: ToolDef
   active: boolean
+  activeWallType: WallType
   onClick: () => void
+  onWallSelect: (type: WallType) => void
 }
 
-function ToolButton({ tool, active, onClick }: ToolButtonProps) {
+function ToolButton({ tool, active, activeWallType, onClick, onWallSelect }: ToolButtonProps) {
+  const [flyoutOpen, setFlyoutOpen] = useState(false)
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const didLongPress = useRef(false)
+
+  const openFlyout = useCallback(() => setFlyoutOpen(true), [])
+  const closeFlyout = useCallback(() => setFlyoutOpen(false), [])
+
+  const handlePointerDown = useCallback((e: React.PointerEvent) => {
+    if (tool.id !== 'wall') return
+    didLongPress.current = false
+    longPressTimer.current = setTimeout(() => {
+      didLongPress.current = true
+      openFlyout()
+    }, LONG_PRESS_MS)
+  }, [tool.id, openFlyout])
+
+  const handlePointerUp = useCallback(() => {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current)
+      longPressTimer.current = null
+    }
+  }, [])
+
+  const handleContextMenu = useCallback((e: React.MouseEvent) => {
+    if (tool.id !== 'wall') return
+    e.preventDefault()
+    openFlyout()
+  }, [tool.id, openFlyout])
+
+  const handleClick = useCallback(() => {
+    if (didLongPress.current) { didLongPress.current = false; return }
+    onClick()
+  }, [onClick])
+
+  const wallLabel = tool.id === 'wall'
+    ? WALL_OPTIONS.find(o => o.type === activeWallType)?.label ?? 'Wall'
+    : tool.label
+
   return (
-    <button
-      onClick={onClick}
-      title={`${tool.label} (${tool.shortcut})`}
-      className={`
-        relative flex flex-col items-center justify-center w-9 h-9 rounded transition-all
-        ${active
-          ? 'bg-accent text-white'
-          : 'text-gray-400 hover:bg-sidebar-hover hover:text-gray-200'
+    <div className="relative">
+      <button
+        onClick={handleClick}
+        onPointerDown={handlePointerDown}
+        onPointerUp={handlePointerUp}
+        onPointerLeave={handlePointerUp}
+        onContextMenu={handleContextMenu}
+        title={tool.id === 'wall'
+          ? `${wallLabel} (${tool.shortcut}) — right-click or hold for wall types`
+          : `${tool.label} (${tool.shortcut})`
         }
-      `}
-    >
-      {tool.icon}
-      <span className="absolute bottom-0.5 right-1 text-[8px] font-mono opacity-60">
-        {tool.shortcut}
-      </span>
-    </button>
+        className={`
+          relative flex flex-col items-center justify-center w-9 h-9 rounded transition-all
+          ${active
+            ? 'bg-accent text-white'
+            : 'text-gray-400 hover:bg-sidebar-hover hover:text-gray-200'
+          }
+        `}
+      >
+        {tool.icon}
+        {tool.id === 'wall' && (
+          <ChevronRight
+            size={7}
+            className="absolute bottom-0.5 left-0.5 opacity-50"
+            strokeWidth={2.5}
+          />
+        )}
+        <span className="absolute bottom-0.5 right-1 text-[8px] font-mono opacity-60">
+          {tool.shortcut}
+        </span>
+      </button>
+
+      {tool.id === 'wall' && flyoutOpen && (
+        <WallFlyout
+          activeWallType={activeWallType}
+          onSelect={onWallSelect}
+          onClose={closeFlyout}
+        />
+      )}
+    </div>
   )
 }
 
 export function LeftToolbar() {
-  const { activeTool, setActiveTool } = useStore()
+  const { activeTool, activeWallType, setActiveTool, setActiveWallType } = useStore()
 
   return (
     <div className="flex flex-col items-center gap-1 py-2 px-1 w-11 bg-sidebar border-r border-gray-700 shrink-0">
@@ -116,7 +172,9 @@ export function LeftToolbar() {
           key={tool.id}
           tool={tool}
           active={activeTool === tool.id}
+          activeWallType={activeWallType}
           onClick={() => setActiveTool(tool.id)}
+          onWallSelect={(type) => setActiveWallType(type)}
         />
       ))}
 

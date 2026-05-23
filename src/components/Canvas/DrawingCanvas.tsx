@@ -17,7 +17,11 @@ const ZOOM_SPEED = 1.1
 const MIN_ZOOM = 0.15
 const MAX_ZOOM = 8
 const DRAG_THRESHOLD = 4
-const WALL_THICKNESS = 0.5  // default exterior wall: 6"
+const WALL_THICKNESS: Record<string, number> = {
+  'wall-exterior': 0.5,
+  'wall-interior': 0.375,
+  'wall-cmu': 0.667,
+}
 const WALL_SNAP_BLOX_IDS = new Set(['cased-opening', 'window-single', 'window-double', 'door-single', 'door-double', 'door-sliding', 'insulation-batt'])
 
 function constrainToOrthogonal(
@@ -33,6 +37,7 @@ export function DrawingCanvas() {
   const containerRef = useRef<HTMLDivElement>(null)
   const stageRef = useRef<Konva.Stage>(null)
   const [size, setSize] = useState({ width: 800, height: 600 })
+  const sizeRef = useRef(size)
 
   const [previewPos, setPreviewPos] = useState<{ x: number; y: number } | null>(null)
   const [wallSnap, setWallSnap] = useState<WallSnapResult | null>(null)
@@ -56,7 +61,7 @@ export function DrawingCanvas() {
 
   const {
     project, stageX, stageY, stageScale,
-    activeBloxId, activeTool, selectedDimIds, pendingBloxWidth,
+    activeBloxId, activeTool, activeWallType, selectedDimIds, pendingBloxWidth,
     setStageTransform, placeElement, clearSelection, setActiveBlox,
     addDimension, updateDimension, deleteSelectedDims, selectDim, selectMany
   } = useStore()
@@ -66,6 +71,7 @@ export function DrawingCanvas() {
 
   const activeBloxRef = useRef(activeBloxId);       activeBloxRef.current = activeBloxId
   const activeToolRef = useRef(activeTool);         activeToolRef.current = activeTool
+  const activeWallTypeRef = useRef(activeWallType); activeWallTypeRef.current = activeWallType
   const snapFeetRef = useRef(snapFeet);             snapFeetRef.current = snapFeet
   const pxPerFtRef = useRef(pixelsPerFoot);         pxPerFtRef.current = pixelsPerFoot
   const pendingBloxWidthRef = useRef(pendingBloxWidth); pendingBloxWidthRef.current = pendingBloxWidth
@@ -93,11 +99,25 @@ export function DrawingCanvas() {
     if (!containerRef.current) return
     const obs = new ResizeObserver(entries => {
       const { width, height } = entries[0].contentRect
+      sizeRef.current = { width, height }
       setSize({ width, height })
     })
     obs.observe(containerRef.current)
     return () => obs.disconnect()
   }, [])
+
+  // ── Center view on new project ───────────────────────────────────────────
+  const centeredForProjectRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (!project || centeredForProjectRef.current === project.id) return
+    centeredForProjectRef.current = project.id
+    const { width, height } = sizeRef.current
+    const cx = width / 2
+    const cy = height / 2
+    setStageTransform(cx, cy, 1)
+    stageRef.current?.scale({ x: 1, y: 1 })
+    stageRef.current?.position({ x: cx, y: cy })
+  }, [project?.id])
 
   // ── Keyboard shortcuts (Illustrator-style) ──────────────────────────────
   useEffect(() => {
@@ -147,7 +167,7 @@ export function DrawingCanvas() {
         }
         if ((e.key === '=' || e.key === '+') && !inInput) { e.preventDefault(); zoomStage(ZOOM_SPEED); return }
         if (e.key === '-' && !inInput)                    { e.preventDefault(); zoomStage(1 / ZOOM_SPEED); return }
-        if (e.key === '0' && !inInput)                    { e.preventDefault(); useStore.getState().resetView(); stageRef.current?.scale({ x: 1, y: 1 }); stageRef.current?.position({ x: 60, y: 60 }); return }
+        if (e.key === '0' && !inInput)                    { e.preventDefault(); const { width, height } = sizeRef.current; const cx = width / 2; const cy = height / 2; useStore.getState().setStageTransform(cx, cy, 1); stageRef.current?.scale({ x: 1, y: 1 }); stageRef.current?.position({ x: cx, y: cy }); return }
         return
       }
 
@@ -426,15 +446,15 @@ export function DrawingCanvas() {
         const dy = Math.abs(constrained.y - start.y)
         if (dx < 0.25 && dy < 0.25) return // too short — ignore click
 
+        const wallType = activeWallTypeRef.current
+        const t = WALL_THICKNESS[wallType] ?? 0.5
         const isHoriz = dx >= dy
-        const t = WALL_THICKNESS
         if (isHoriz) {
-          // Extend t/2 at both ends so corners fill completely
-          placeRef.current('wall-exterior',
+          placeRef.current(wallType,
             Math.min(start.x, constrained.x) - t / 2, start.y - t / 2,
             dx + t, t)
         } else {
-          placeRef.current('wall-exterior',
+          placeRef.current(wallType,
             start.x - t / 2, Math.min(start.y, constrained.y) - t / 2,
             t, dy + t)
         }
@@ -487,7 +507,7 @@ export function DrawingCanvas() {
         const c = constrainToOrthogonal(wallStart, wallCursor)
         const dx = Math.abs(c.x - wallStart.x)
         const dy = Math.abs(c.y - wallStart.y)
-        const t = WALL_THICKNESS
+        const t = WALL_THICKNESS[activeWallType] ?? 0.5
         const isHoriz = dx >= dy
         return isHoriz
           ? { x: (Math.min(wallStart.x, c.x) - t / 2) * pxPerFt, y: (wallStart.y - t / 2) * pxPerFt, w: (dx + t) * pxPerFt, h: t * pxPerFt }

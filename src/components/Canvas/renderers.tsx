@@ -237,12 +237,23 @@ export function SlidingDoorRenderer({ widthPx, heightPx }: RendererProps) {
 }
 
 export function WindowRenderer({ widthPx, heightPx }: RendererProps) {
+  const isLandscape = widthPx >= heightPx
+  if (isLandscape) {
+    return (
+      <Group>
+        <Rect width={widthPx} height={heightPx} fill="white" stroke={STROKE} strokeWidth={STROKE_THIN} />
+        <Line points={[0, heightPx / 4, widthPx, heightPx / 4]} stroke={STROKE} strokeWidth={0.5} />
+        <Line points={[0, heightPx / 2, widthPx, heightPx / 2]} stroke={STROKE} strokeWidth={STROKE_THIN} />
+        <Line points={[0, heightPx * 3 / 4, widthPx, heightPx * 3 / 4]} stroke={STROKE} strokeWidth={0.5} />
+      </Group>
+    )
+  }
   return (
     <Group>
       <Rect width={widthPx} height={heightPx} fill="white" stroke={STROKE} strokeWidth={STROKE_THIN} />
-      <Line points={[0, heightPx / 4, widthPx, heightPx / 4]} stroke={STROKE} strokeWidth={0.5} />
-      <Line points={[0, heightPx / 2, widthPx, heightPx / 2]} stroke={STROKE} strokeWidth={STROKE_THIN} />
-      <Line points={[0, heightPx * 3 / 4, widthPx, heightPx * 3 / 4]} stroke={STROKE} strokeWidth={0.5} />
+      <Line points={[widthPx / 4, 0, widthPx / 4, heightPx]} stroke={STROKE} strokeWidth={0.5} />
+      <Line points={[widthPx / 2, 0, widthPx / 2, heightPx]} stroke={STROKE} strokeWidth={STROKE_THIN} />
+      <Line points={[widthPx * 3 / 4, 0, widthPx * 3 / 4, heightPx]} stroke={STROKE} strokeWidth={0.5} />
     </Group>
   )
 }

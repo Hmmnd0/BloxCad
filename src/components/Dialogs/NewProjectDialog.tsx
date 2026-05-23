@@ -44,7 +44,7 @@ export function NewProjectDialog() {
         {/* Header */}
         <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-gray-700">
           <div>
-            <h1 className="text-white font-bold text-lg tracking-tight">BloxCad</h1>
+            <h1 className="text-white font-bold text-lg tracking-tight">bloxCAD</h1>
             <p className="text-gray-400 text-sm">Architectural Drawing Tool</p>
           </div>
           {project && (

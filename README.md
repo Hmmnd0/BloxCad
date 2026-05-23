@@ -1,4 +1,4 @@
-# BloxCad
+# bloxCAD
 
 Architectural floor plan drawing tool built with Electron, React, and Konva.js.
 
@@ -12,6 +12,48 @@ Architectural floor plan drawing tool built with Electron, React, and Konva.js.
 - Layer management
 - Export to PNG and PDF
 - Undo / redo
+
+## Keyboard Shortcuts
+
+### Tools
+
+| Key | Tool |
+|-----|------|
+| `V` | Select |
+| `H` | Pan |
+| `W` | Wall |
+| `D` | Dimension |
+| `S` | Rectangle |
+
+### Edit
+
+| Shortcut | Action |
+|----------|--------|
+| `⌘Z` | Undo |
+| `⌘⇧Z` | Redo |
+| `⌘C` | Copy |
+| `⌘V` | Paste |
+| `⌘D` | Duplicate |
+| `⌘A` | Select all |
+| `Delete` / `Backspace` | Delete selected |
+| `R` | Rotate selected 90° |
+
+### View
+
+| Shortcut | Action |
+|----------|--------|
+| `⌘+` / `⌘=` | Zoom in |
+| `⌘-` | Zoom out |
+| `⌘0` | Reset view |
+| `Scroll wheel` | Zoom |
+
+### Canvas
+
+| Key | Action |
+|-----|--------|
+| `↑ ↓ ← →` | Nudge selected (1 ft) |
+| `⇧ + arrows` | Nudge selected (10 ft) |
+| `Escape` | Cancel current action / deselect |
 
 ## Download
 

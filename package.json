@@ -1,7 +1,7 @@
 {
   "name": "bloxcad",
   "version": "0.1.0",
-  "description": "Architectural drawing application",
+  "description": "bloxCAD — Architectural floor plan drawing application",
   "author": "Hmmnd0",
   "main": "./out/main/index.js",
   "scripts": {
@@ -28,6 +28,7 @@
   },
   "dependencies": {
     "konva": "^9.3.14",
+    "lucide-react": "^1.16.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-konva": "^18.2.10",
@@ -36,17 +37,24 @@
   },
   "build": {
     "appId": "com.bloxcad.app",
-    "productName": "BloxCad",
+    "productName": "bloxCAD",
     "directories": {
       "output": "release"
     },
-    "files": ["out"],
+    "files": [
+      "out"
+    ],
     "mac": {
       "category": "public.app-category.productivity",
-      "target": ["dmg", "zip"]
+      "target": [
+        "dmg",
+        "zip"
+      ]
     },
     "win": {
-      "target": ["nsis"]
+      "target": [
+        "nsis"
+      ]
     }
   }
 }
