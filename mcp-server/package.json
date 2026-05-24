@@ -1,0 +1,13 @@
+{
+  "name": "bloxcad-mcp-server",
+  "version": "1.0.0",
+  "description": "MCP server for bloxCAD — lets Claude design floor plans directly on the canvas",
+  "type": "module",
+  "main": "index.mjs",
+  "bin": {
+    "bloxcad-mcp": "./index.mjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0"
+  }
+}

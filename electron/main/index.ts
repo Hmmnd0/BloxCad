@@ -2,6 +2,56 @@ import { app, BrowserWindow, shell, ipcMain, dialog } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { readFileSync, writeFileSync } from 'fs'
+import { createServer } from 'http'
+import { randomUUID } from 'crypto'
+
+// ── MCP bridge ────────────────────────────────────────────────────────────────
+const MCP_PORT = 57489
+const pendingMcpRequests = new Map<string, (result: unknown) => void>()
+
+ipcMain.on('mcp-response', (_evt, { requestId, result }) => {
+  const resolve = pendingMcpRequests.get(requestId)
+  if (resolve) { pendingMcpRequests.delete(requestId); resolve(result) }
+})
+
+function sendMcpAction(win: BrowserWindow, action: string, payload: unknown): Promise<unknown> {
+  return new Promise((resolve) => {
+    const requestId = randomUUID()
+    pendingMcpRequests.set(requestId, resolve)
+    win.webContents.send('mcp-action', { requestId, action, payload })
+    setTimeout(() => {
+      if (pendingMcpRequests.has(requestId)) {
+        pendingMcpRequests.delete(requestId)
+        resolve({ error: 'renderer timeout' })
+      }
+    }, 7000)
+  })
+}
+
+function startMcpBridge(win: BrowserWindow) {
+  const srv = createServer((req, res) => {
+    if (req.method !== 'POST' || req.url !== '/mcp') {
+      res.writeHead(404); res.end(); return
+    }
+    let body = ''
+    req.on('data', (chunk) => { body += chunk })
+    req.on('end', async () => {
+      try {
+        const { action, payload } = JSON.parse(body)
+        const result = await sendMcpAction(win, action, payload)
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify(result))
+      } catch (e) {
+        res.writeHead(400, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ error: String(e) }))
+      }
+    })
+  })
+  srv.listen(MCP_PORT, '127.0.0.1', () => {
+    console.log(`[bloxCAD] MCP bridge listening on localhost:${MCP_PORT}`)
+  })
+  srv.on('error', (e) => console.error('[bloxCAD] MCP bridge error:', e.message))
+}
 
 function buildImagePDF(jpegBuf: Buffer, imgW: number, imgH: number): Buffer {
   // Scale image to fill Letter landscape (792 x 612 pt) while preserving aspect ratio
@@ -52,7 +102,7 @@ function buildImagePDF(jpegBuf: Buffer, imgW: number, imgH: number): Buffer {
   return Buffer.concat(parts)
 }
 
-function createWindow(): void {
+function createWindow(): BrowserWindow {
   const mainWindow = new BrowserWindow({
     width: 1440,
     height: 900,
@@ -81,6 +131,8 @@ function createWindow(): void {
   } else {
     mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
   }
+
+  return mainWindow
 }
 
 app.whenReady().then(() => {
@@ -141,7 +193,8 @@ app.whenReady().then(() => {
     return { success: false }
   })
 
-  createWindow()
+  const win = createWindow()
+  startMcpBridge(win)
 
   app.on('activate', function () {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()

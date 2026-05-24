@@ -8,9 +8,11 @@ import { NewProjectDialog } from './components/Dialogs/NewProjectDialog'
 import { DRCPanel } from './components/DRCPanel/DRCPanel'
 import { TitleBlock } from './components/TitleBlock/TitleBlock'
 import { useStore } from './store/useStore'
+import { useMcpBridge } from './hooks/useMcpBridge'
 
 export default function App() {
   const { project, showNewProjectDialog, showDRCPanel, showTitleBlock } = useStore()
+  useMcpBridge()
 
   return (
     <div className="flex flex-col h-screen bg-gray-900 text-white overflow-hidden">

@@ -55,6 +55,58 @@ Architectural floor plan drawing tool built with Electron, React, and Konva.js.
 | `⇧ + arrows` | Nudge selected (10 ft) |
 | `Escape` | Cancel current action / deselect |
 
+## MCP Server (Claude integration)
+
+bloxCAD ships an MCP server that lets Claude design floor plans directly on the canvas — place walls, doors, fixtures, and dimensions through natural language.
+
+### Setup
+
+**1. Install the MCP server dependencies:**
+
+```bash
+cd mcp-server
+npm install
+```
+
+**2. Add to Claude Desktop** (`~/Library/Application Support/Claude/claude_desktop_config.json`):
+
+```json
+{
+  "mcpServers": {
+    "bloxcad": {
+      "command": "node",
+      "args": ["/absolute/path/to/BloxCad/mcp-server/index.mjs"]
+    }
+  }
+}
+```
+
+Replace the path with the actual location of your bloxCAD folder.
+
+**3. Open bloxCAD first, then start Claude Desktop.**
+
+The app listens on `localhost:57489`. As long as bloxCAD is running, Claude can read and modify the current project.
+
+### Available tools
+
+| Tool | What it does |
+|------|-------------|
+| `list_blox` | List all element types with IDs and dimensions |
+| `get_project` | Read current canvas state (elements, dims) |
+| `place_element` | Place any blox at x,y coordinates (feet) |
+| `place_wall` | Draw a wall segment between two points |
+| `update_element` | Move, resize, or rotate an element |
+| `delete_elements` | Remove elements by ID |
+| `add_dimension` | Add a dimension line |
+| `undo` / `redo` | Undo or redo the last action |
+
+### Example prompts
+
+- *"Draw a 20×15 ft rectangular room with exterior walls"*
+- *"Add a bathroom in the top-right corner with a toilet, vanity, and door"*
+- *"Place a queen bed centered in the bedroom with a nightstand on each side"*
+- *"Dimension all the exterior walls"*
+
 ## Download
 
 See [Releases](../../releases) for the latest macOS `.dmg`.

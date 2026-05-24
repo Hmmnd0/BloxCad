@@ -9,7 +9,15 @@ const api = {
   exportPNG: (dataUrl: string, defaultName: string) =>
     ipcRenderer.invoke('export-png', { dataUrl, defaultName }),
   exportPDF: (dataUrl: string, imgWidth: number, imgHeight: number, defaultName: string) =>
-    ipcRenderer.invoke('export-pdf', { dataUrl, imgWidth, imgHeight, defaultName })
+    ipcRenderer.invoke('export-pdf', { dataUrl, imgWidth, imgHeight, defaultName }),
+
+  // MCP bridge
+  onMcpAction: (cb: (msg: { requestId: string; action: string; payload: unknown }) => void) => {
+    ipcRenderer.on('mcp-action', (_evt, msg) => cb(msg))
+  },
+  mcpRespond: (requestId: string, result: unknown) => {
+    ipcRenderer.send('mcp-response', { requestId, result })
+  },
 }
 
 if (process.contextIsolated) {
