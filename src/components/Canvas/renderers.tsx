@@ -223,15 +223,28 @@ export function DoubleDoorRenderer({ widthPx, heightPx, properties }: RendererPr
 }
 
 export function SlidingDoorRenderer({ widthPx, heightPx }: RendererProps) {
-  const panelW = widthPx / 2
+  const isLandscape = widthPx >= heightPx
+
+  if (isLandscape) {
+    const panelW = widthPx / 2
+    return (
+      <Group>
+        <Rect width={widthPx} height={heightPx} fill="rgba(135,206,250,0.18)" stroke={STROKE} strokeWidth={STROKE_THIN} />
+        <Rect x={0} width={panelW} height={heightPx} fill="rgba(135,206,250,0.3)" stroke={STROKE} strokeWidth={STROKE_MED} />
+        <Line points={[panelW * 0.2, heightPx / 2, panelW * 0.8, heightPx / 2]} stroke={STROKE} strokeWidth={1} />
+        <Line points={[panelW * 0.6, heightPx * 0.2, panelW * 0.8, heightPx / 2, panelW * 0.6, heightPx * 0.8]} stroke={STROKE} strokeWidth={1} />
+      </Group>
+    )
+  }
+
+  // Portrait: panel slides along Y axis
+  const panelH = heightPx / 2
   return (
     <Group>
       <Rect width={widthPx} height={heightPx} fill="rgba(135,206,250,0.18)" stroke={STROKE} strokeWidth={STROKE_THIN} />
-      {/* Active panel */}
-      <Rect x={0} width={panelW} height={heightPx} fill="rgba(135,206,250,0.3)" stroke={STROKE} strokeWidth={STROKE_MED} />
-      {/* Direction arrow */}
-      <Line points={[panelW * 0.2, heightPx / 2, panelW * 0.8, heightPx / 2]} stroke={STROKE} strokeWidth={1} />
-      <Line points={[panelW * 0.6, heightPx * 0.2, panelW * 0.8, heightPx / 2, panelW * 0.6, heightPx * 0.8]} stroke={STROKE} strokeWidth={1} />
+      <Rect y={0} width={widthPx} height={panelH} fill="rgba(135,206,250,0.3)" stroke={STROKE} strokeWidth={STROKE_MED} />
+      <Line points={[widthPx / 2, panelH * 0.2, widthPx / 2, panelH * 0.8]} stroke={STROKE} strokeWidth={1} />
+      <Line points={[widthPx * 0.2, panelH * 0.6, widthPx / 2, panelH * 0.8, widthPx * 0.8, panelH * 0.6]} stroke={STROKE} strokeWidth={1} />
     </Group>
   )
 }
@@ -372,76 +385,128 @@ export function StraightStairsRenderer({ widthPx, heightPx, properties }: Render
 // ─── FIXTURES ────────────────────────────────────────────────────────────────
 
 export function ToiletRenderer({ widthPx, heightPx }: RendererProps) {
-  const tankH = heightPx * 0.32
-  const bowlStartY = tankH + 2
-  const bowlH = heightPx - tankH - 2
+  const isPortrait = heightPx >= widthPx
 
+  if (isPortrait) {
+    const tankH = heightPx * 0.32
+    const bowlStartY = tankH + 2
+    const bowlH = heightPx - tankH - 2
+    return (
+      <Group>
+        <Rect x={widthPx * 0.05} y={0} width={widthPx * 0.9} height={tankH}
+          cornerRadius={3} fill="white" stroke={STROKE} strokeWidth={STROKE_THIN} />
+        <Ellipse x={widthPx / 2} y={bowlStartY + bowlH / 2}
+          radiusX={widthPx * 0.45} radiusY={bowlH / 2}
+          fill="white" stroke={STROKE} strokeWidth={STROKE_THIN} />
+        <Ellipse x={widthPx / 2} y={bowlStartY + bowlH / 2}
+          radiusX={widthPx * 0.32} radiusY={bowlH * 0.38}
+          fill="#f0f0f0" stroke="#888" strokeWidth={0.5} />
+      </Group>
+    )
+  }
+
+  // Landscape: tank at left
+  const tankW = widthPx * 0.32
+  const bowlStartX = tankW + 2
+  const bowlW = widthPx - tankW - 2
   return (
     <Group>
-      {/* Tank */}
-      <Rect x={widthPx * 0.05} y={0} width={widthPx * 0.9} height={tankH}
+      <Rect x={0} y={heightPx * 0.05} width={tankW} height={heightPx * 0.9}
         cornerRadius={3} fill="white" stroke={STROKE} strokeWidth={STROKE_THIN} />
-      {/* Bowl */}
-      <Ellipse
-        x={widthPx / 2} y={bowlStartY + bowlH / 2}
-        radiusX={widthPx * 0.45} radiusY={bowlH / 2}
-        fill="white" stroke={STROKE} strokeWidth={STROKE_THIN}
-      />
-      {/* Seat inner */}
-      <Ellipse
-        x={widthPx / 2} y={bowlStartY + bowlH / 2}
-        radiusX={widthPx * 0.32} radiusY={bowlH * 0.38}
-        fill="#f0f0f0" stroke="#888" strokeWidth={0.5}
-      />
+      <Ellipse x={bowlStartX + bowlW / 2} y={heightPx / 2}
+        radiusX={bowlW / 2} radiusY={heightPx * 0.45}
+        fill="white" stroke={STROKE} strokeWidth={STROKE_THIN} />
+      <Ellipse x={bowlStartX + bowlW / 2} y={heightPx / 2}
+        radiusX={bowlW * 0.38} radiusY={heightPx * 0.32}
+        fill="#f0f0f0" stroke="#888" strokeWidth={0.5} />
     </Group>
   )
 }
 
 export function LavSinkRenderer({ widthPx, heightPx }: RendererProps) {
+  const isPortrait = heightPx >= widthPx
+  const cr = Math.min(widthPx, heightPx) * 0.15
+
+  if (isPortrait) {
+    return (
+      <Group>
+        <Rect width={widthPx} height={heightPx} cornerRadius={cr} fill="white" stroke={STROKE} strokeWidth={STROKE_THIN} />
+        <Ellipse x={widthPx / 2} y={heightPx * 0.55} radiusX={widthPx * 0.32} radiusY={heightPx * 0.28}
+          fill="#f5f5f5" stroke="#888" strokeWidth={0.5} />
+        <Circle x={widthPx / 2} y={heightPx * 0.22} radius={Math.min(widthPx, heightPx) * 0.07} fill="#aaa" stroke={STROKE} strokeWidth={0.5} />
+      </Group>
+    )
+  }
+
+  // Landscape: faucet at left
   return (
     <Group>
-      <Rect width={widthPx} height={heightPx}
-        cornerRadius={widthPx * 0.15} fill="white" stroke={STROKE} strokeWidth={STROKE_THIN} />
-      <Ellipse
-        x={widthPx / 2} y={heightPx * 0.55}
-        radiusX={widthPx * 0.32} radiusY={heightPx * 0.3}
-        fill="#f5f5f5" stroke="#888" strokeWidth={0.5}
-      />
-      {/* Faucet */}
-      <Circle x={widthPx / 2} y={heightPx * 0.22} radius={widthPx * 0.07} fill="#aaa" stroke={STROKE} strokeWidth={0.5} />
+      <Rect width={widthPx} height={heightPx} cornerRadius={cr} fill="white" stroke={STROKE} strokeWidth={STROKE_THIN} />
+      <Ellipse x={widthPx * 0.55} y={heightPx / 2} radiusX={widthPx * 0.28} radiusY={heightPx * 0.32}
+        fill="#f5f5f5" stroke="#888" strokeWidth={0.5} />
+      <Circle x={widthPx * 0.22} y={heightPx / 2} radius={Math.min(widthPx, heightPx) * 0.07} fill="#aaa" stroke={STROKE} strokeWidth={0.5} />
     </Group>
   )
 }
 
 export function BathtubRenderer({ widthPx, heightPx }: RendererProps) {
-  const pad = widthPx * 0.1
+  const isPortrait = heightPx >= widthPx
+
+  if (isPortrait) {
+    const pad = widthPx * 0.1
+    return (
+      <Group>
+        <Rect width={widthPx} height={heightPx}
+          cornerRadius={widthPx * 0.08} fill="white" stroke={STROKE} strokeWidth={STROKE_THIN} />
+        <Rect x={pad} y={heightPx * 0.12} width={widthPx - pad * 2} height={heightPx * 0.75}
+          cornerRadius={widthPx * 0.06} fill="#f0f8ff" stroke="#aaa" strokeWidth={0.5} />
+        <Circle x={widthPx / 2} y={heightPx * 0.78} radius={widthPx * 0.05} fill="white" stroke="#666" strokeWidth={0.5} />
+        <Circle x={widthPx / 2} y={heightPx * 0.12} radius={widthPx * 0.07} fill="#aaa" stroke={STROKE} strokeWidth={0.5} />
+      </Group>
+    )
+  }
+
+  // Landscape: faucet at left, drain at right
+  const pad = heightPx * 0.1
   return (
     <Group>
       <Rect width={widthPx} height={heightPx}
-        cornerRadius={widthPx * 0.08} fill="white" stroke={STROKE} strokeWidth={STROKE_THIN} />
-      <Rect x={pad} y={heightPx * 0.12} width={widthPx - pad * 2} height={heightPx * 0.75}
-        cornerRadius={widthPx * 0.06} fill="#f0f8ff" stroke="#aaa" strokeWidth={0.5} />
-      {/* Drain */}
-      <Circle x={widthPx / 2} y={heightPx * 0.78} radius={widthPx * 0.05} fill="white" stroke="#666" strokeWidth={0.5} />
-      {/* Faucet */}
-      <Circle x={widthPx / 2} y={heightPx * 0.12} radius={widthPx * 0.07} fill="#aaa" stroke={STROKE} strokeWidth={0.5} />
+        cornerRadius={heightPx * 0.08} fill="white" stroke={STROKE} strokeWidth={STROKE_THIN} />
+      <Rect x={widthPx * 0.12} y={pad} width={widthPx * 0.75} height={heightPx - pad * 2}
+        cornerRadius={heightPx * 0.06} fill="#f0f8ff" stroke="#aaa" strokeWidth={0.5} />
+      <Circle x={widthPx * 0.78} y={heightPx / 2} radius={heightPx * 0.05} fill="white" stroke="#666" strokeWidth={0.5} />
+      <Circle x={widthPx * 0.12} y={heightPx / 2} radius={heightPx * 0.07} fill="#aaa" stroke={STROKE} strokeWidth={0.5} />
     </Group>
   )
 }
 
 export function KitchenSinkRenderer({ widthPx, heightPx }: RendererProps) {
-  const basinW = (widthPx - 8) / 2
+  const isLandscape = widthPx >= heightPx
+
+  if (isLandscape) {
+    const basinW = (widthPx - 8) / 2
+    return (
+      <Group>
+        <Rect width={widthPx} height={heightPx} fill="white" stroke={STROKE} strokeWidth={STROKE_THIN} />
+        <Rect x={3} y={3} width={basinW} height={heightPx - 6}
+          cornerRadius={3} fill="#f5f5f5" stroke="#888" strokeWidth={0.5} />
+        <Rect x={basinW + 5} y={3} width={basinW} height={heightPx - 6}
+          cornerRadius={3} fill="#f5f5f5" stroke="#888" strokeWidth={0.5} />
+        <Circle x={widthPx / 2} y={heightPx / 2} radius={Math.min(widthPx, heightPx) * 0.08} fill="#aaa" stroke={STROKE} strokeWidth={0.5} />
+      </Group>
+    )
+  }
+
+  // Portrait: basins stacked vertically
+  const basinH = (heightPx - 8) / 2
   return (
     <Group>
       <Rect width={widthPx} height={heightPx} fill="white" stroke={STROKE} strokeWidth={STROKE_THIN} />
-      {/* Left basin */}
-      <Rect x={3} y={3} width={basinW} height={heightPx - 6}
+      <Rect x={3} y={3} width={widthPx - 6} height={basinH}
         cornerRadius={3} fill="#f5f5f5" stroke="#888" strokeWidth={0.5} />
-      {/* Right basin */}
-      <Rect x={basinW + 5} y={3} width={basinW} height={heightPx - 6}
+      <Rect x={3} y={basinH + 5} width={widthPx - 6} height={basinH}
         cornerRadius={3} fill="#f5f5f5" stroke="#888" strokeWidth={0.5} />
-      {/* Center faucet */}
-      <Circle x={widthPx / 2} y={heightPx / 2} radius={widthPx * 0.05} fill="#aaa" stroke={STROKE} strokeWidth={0.5} />
+      <Circle x={widthPx / 2} y={heightPx / 2} radius={Math.min(widthPx, heightPx) * 0.08} fill="#aaa" stroke={STROKE} strokeWidth={0.5} />
     </Group>
   )
 }
