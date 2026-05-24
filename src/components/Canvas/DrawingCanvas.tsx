@@ -114,10 +114,13 @@ export function DrawingCanvas() {
     // rAF ensures the container has its final layout dimensions before we read them
     requestAnimationFrame(() => {
       const rect = containerRef.current?.getBoundingClientRect()
-      const width = rect?.width ?? sizeRef.current.width
-      const height = rect?.height ?? sizeRef.current.height
-      const cx = width / 2
-      const cy = height / 2
+      const viewW = rect?.width ?? sizeRef.current.width
+      const viewH = rect?.height ?? sizeRef.current.height
+      const pxPerFt = SCALES[project.scale].pixelsPerFoot
+      // Place center of the 200×200ft grid at the center of the viewport
+      const gridCenterPx = 100 * pxPerFt
+      const cx = viewW / 2 - gridCenterPx
+      const cy = viewH / 2 - gridCenterPx
       setStageTransform(cx, cy, 1)
       stageRef.current?.scale({ x: 1, y: 1 })
       stageRef.current?.position({ x: cx, y: cy })
@@ -172,7 +175,7 @@ export function DrawingCanvas() {
         }
         if ((e.key === '=' || e.key === '+') && !inInput) { e.preventDefault(); zoomStage(ZOOM_SPEED); return }
         if (e.key === '-' && !inInput)                    { e.preventDefault(); zoomStage(1 / ZOOM_SPEED); return }
-        if (e.key === '0' && !inInput)                    { e.preventDefault(); const { width, height } = sizeRef.current; const cx = width / 2; const cy = height / 2; useStore.getState().setStageTransform(cx, cy, 1); stageRef.current?.scale({ x: 1, y: 1 }); stageRef.current?.position({ x: cx, y: cy }); return }
+        if (e.key === '0' && !inInput)                    { e.preventDefault(); const { width, height } = sizeRef.current; const proj = useStore.getState().project; const pxPerFt = proj ? SCALES[proj.scale].pixelsPerFoot : 24; const gridCenterPx = 100 * pxPerFt; const cx = width / 2 - gridCenterPx; const cy = height / 2 - gridCenterPx; useStore.getState().setStageTransform(cx, cy, 1); stageRef.current?.scale({ x: 1, y: 1 }); stageRef.current?.position({ x: cx, y: cy }); return }
         return
       }
 
