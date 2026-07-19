@@ -13,11 +13,18 @@ const api = {
 
   // MCP bridge
   onMcpAction: (cb: (msg: { requestId: string; action: string; payload: unknown }) => void) => {
+    ipcRenderer.removeAllListeners('mcp-action')
     ipcRenderer.on('mcp-action', (_evt, msg) => cb(msg))
   },
   mcpRespond: (requestId: string, result: unknown) => {
     ipcRenderer.send('mcp-response', { requestId, result })
   },
+
+  // Claude Desktop setup
+  configureClaude: (): Promise<{ success: boolean; configPath: string; error?: string }> =>
+    ipcRenderer.invoke('configure-claude'),
+  getClaudeStatus: (): Promise<{ configured: boolean; configPath: string; mcpServerPath: string }> =>
+    ipcRenderer.invoke('get-claude-status'),
 }
 
 if (process.contextIsolated) {

@@ -1,17 +1,21 @@
 import React, { useRef, useCallback, useEffect, useState } from 'react'
-import { Stage, Layer, Rect, Line, Text as KText } from 'react-konva'
+import { Stage, Layer, Rect, Line, Text as KText, Circle, Shape } from 'react-konva'
 import Konva from 'konva'
 import { GridLayer } from './GridLayer'
+import { UnderlayLayer, computeRenderSize } from './UnderlayLayer'
+import { ArcWallLayer } from './ArcWallLayer'
 import { ElementsLayer } from './ElementsLayer'
 import { PreviewLayer } from './PreviewLayer'
 import { DimensionLayer } from './DimensionLayer'
 import { useStore, getPixelsPerFoot, getSnapFeet } from '../../store/useStore'
-import { snapToGrid, pixelsToFeet, formatFeet } from '../../utils/scale'
+import { snapToGrid, pixelsToFeet, formatFeet, formatInches } from '../../utils/scale'
+import { getActiveElements, getActiveDimensions } from '../../store/useStore'
 import { SCALES, Scale } from '../../types'
 import { getElementSnapPoints, nearestSnapPoint, edgeSnapThresholdFt, snapOpeningToWall, snapWallEndpoint, WallSnapResult } from '../../utils/snap'
 import { getBloxById } from '../../blox/definitions'
 import { registerStage, unregisterStage } from '../../utils/exportManager'
 import { ScaleBar } from './ScaleBar'
+import { LegendOverlay } from './LegendOverlay'
 
 const ZOOM_SPEED = 1.1
 const MIN_ZOOM = 0.15
@@ -22,7 +26,7 @@ const WALL_THICKNESS: Record<string, number> = {
   'wall-interior': 0.375,
   'wall-cmu': 0.667,
 }
-const WALL_SNAP_BLOX_IDS = new Set(['cased-opening', 'window-single', 'window-double', 'door-single', 'door-double', 'door-sliding', 'insulation-batt'])
+const WALL_SNAP_BLOX_IDS = new Set(['cased-opening', 'window-single', 'window-double', 'door-single', 'door-double', 'door-sliding'])
 
 function constrainToOrthogonal(
   start: { x: number; y: number },
@@ -46,7 +50,17 @@ export function DrawingCanvas() {
   const [dimCursor, setDimCursor] = useState<{ x: number; y: number } | null>(null)
   const [wallStart, setWallStart] = useState<{ x: number; y: number } | null>(null)
   const [wallCursor, setWallCursor] = useState<{ x: number; y: number } | null>(null)
+  const [diagWallStart, setDiagWallStart] = useState<{ x: number; y: number } | null>(null)
+  const [diagWallCursor, setDiagWallCursor] = useState<{ x: number; y: number } | null>(null)
+  const [polyVerts, setPolyVerts] = useState<{ x: number; y: number }[]>([])
+  const [polyCursor, setPolyCursor] = useState<{ x: number; y: number } | null>(null)
+  const [arcWallPhase, setArcWallPhase] = useState<0 | 1 | 2>(0)
+  const [arcWallCenter, setArcWallCenter] = useState<{ x: number; y: number } | null>(null)
+  const [arcWallStart, setArcWallStart] = useState<{ x: number; y: number } | null>(null)
+  const [arcWallCursor, setArcWallCursor] = useState<{ x: number; y: number } | null>(null)
   const DEFAULT_DIM_OFFSET = 1.5
+
+  const cursorReadoutRef = useRef<HTMLDivElement>(null)
 
   const [marquee, setMarquee] = useState<{
     startFt: { x: number; y: number }
@@ -63,7 +77,9 @@ export function DrawingCanvas() {
     project, stageX, stageY, stageScale,
     activeBloxId, activeTool, activeWallType, selectedDimIds, pendingBloxWidth,
     setStageTransform, placeElement, clearSelection, setActiveBlox,
-    addDimension, updateDimension, deleteSelectedDims, selectDim, selectMany
+    addDimension, updateDimension, deleteSelectedDims, selectDim, selectMany, placePolygon,
+    underlayCalibrationMode, addUnderlayCalibrationPoint, cancelUnderlayCalibration,
+    placeArcWall, pickPointResolver
   } = useStore()
 
   const pixelsPerFoot = getPixelsPerFoot(useStore.getState())
@@ -74,11 +90,20 @@ export function DrawingCanvas() {
   const activeWallTypeRef = useRef(activeWallType); activeWallTypeRef.current = activeWallType
   const snapFeetRef = useRef(snapFeet);             snapFeetRef.current = snapFeet
   const pxPerFtRef = useRef(pixelsPerFoot);         pxPerFtRef.current = pixelsPerFoot
+  const underlayCalModeRef = useRef(underlayCalibrationMode); underlayCalModeRef.current = underlayCalibrationMode
   const pendingBloxWidthRef = useRef(pendingBloxWidth); pendingBloxWidthRef.current = pendingBloxWidth
   const dimStartRef = useRef(dimStart);       dimStartRef.current = dimStart
   const wallStartRef = useRef(wallStart);     wallStartRef.current = wallStart
+  const diagWallStartRef = useRef(diagWallStart); diagWallStartRef.current = diagWallStart
+  const polyVertsRef = useRef(polyVerts); polyVertsRef.current = polyVerts
   const projectRef = useRef(project);         projectRef.current = project
   const placeRef = useRef(placeElement);      placeRef.current = placeElement
+  const placePolyRef = useRef(placePolygon);  placePolyRef.current = placePolygon
+  const placeArcWallRef = useRef(placeArcWall); placeArcWallRef.current = placeArcWall
+
+  const arcWallPhaseRef = useRef(arcWallPhase);   arcWallPhaseRef.current = arcWallPhase
+  const arcWallCenterRef = useRef(arcWallCenter); arcWallCenterRef.current = arcWallCenter
+  const arcWallStartRef = useRef(arcWallStart);   arcWallStartRef.current = arcWallStart
 
   const isPanning = useRef(false)
   const spaceHeld = useRef(false)
@@ -93,6 +118,8 @@ export function DrawingCanvas() {
     if (stageRef.current) registerStage(stageRef.current)
     return () => unregisterStage()
   }, [])
+
+  const wheelSyncTimerRef = useRef<ReturnType<typeof setTimeout>>()
 
   // ── Resize observer ──────────────────────────────────────────────────────
   useEffect(() => {
@@ -117,10 +144,14 @@ export function DrawingCanvas() {
       const viewW = rect?.width ?? sizeRef.current.width
       const viewH = rect?.height ?? sizeRef.current.height
       const pxPerFt = SCALES[project.scale].pixelsPerFoot
-      // Place center of the 200×200ft grid at the center of the viewport
-      const gridCenterPx = 100 * pxPerFt
-      const cx = viewW / 2 - gridCenterPx
-      const cy = viewH / 2 - gridCenterPx
+      // Center the grid in the viewport (elevation uses a 200×60 grid)
+      const isElev = project.mode === 'elevation'
+      const isDetail = project.mode === 'detail'
+      // Detail: center of 240×180 inch canvas; elev: top-center (30ft up); plan: center of 200×200
+      const gridCenterX = (isDetail ? 120 : 100) * pxPerFt
+      const gridCenterY = (isElev ? 30 : isDetail ? 90 : 100) * pxPerFt
+      const cx = viewW / 2 - gridCenterX
+      const cy = viewH / 2 - gridCenterY
       setStageTransform(cx, cy, 1)
       stageRef.current?.scale({ x: 1, y: 1 })
       stageRef.current?.position({ x: cx, y: cy })
@@ -151,12 +182,19 @@ export function DrawingCanvas() {
 
       if (e.code === 'Space' && !inInput) { spaceHeld.current = true; e.preventDefault() }
 
-      // Escape — cancel active operation / deselect
+      // Escape — exit group isolation first, then cancel active operation / deselect
       if (e.key === 'Escape') {
+        if (useStore.getState().activeGroupId !== null) {
+          useStore.getState().exitGroup()
+          return
+        }
         setActiveBlox(null); setPreviewPos(null)
         setDimStart(null); setDimCursor(null)
         setWallStart(null); setWallCursor(null)
+        setDiagWallStart(null); setDiagWallCursor(null)
+        setPolyVerts([]); setPolyCursor(null)
         rectDrawRef.current = null; setRectDraw(null)
+        setArcWallPhase(0); setArcWallCenter(null); setArcWallStart(null); setArcWallCursor(null)
         clearSelection()
       }
 
@@ -170,12 +208,14 @@ export function DrawingCanvas() {
         if (e.key === 'a' && !inInput)     {
           e.preventDefault()
           const { project } = useStore.getState()
-          if (project) useStore.getState().selectMany(project.elements.map(el => el.id), project.dimensions.map(d => d.id))
+          if (project) useStore.getState().selectMany(getActiveElements(useStore.getState()).map(el => el.id), getActiveDimensions(useStore.getState()).map(d => d.id))
           return
         }
         if ((e.key === '=' || e.key === '+') && !inInput) { e.preventDefault(); zoomStage(ZOOM_SPEED); return }
         if (e.key === '-' && !inInput)                    { e.preventDefault(); zoomStage(1 / ZOOM_SPEED); return }
         if (e.key === '0' && !inInput)                    { e.preventDefault(); const { width, height } = sizeRef.current; const proj = useStore.getState().project; const pxPerFt = proj ? SCALES[proj.scale].pixelsPerFoot : 24; const gridCenterPx = 100 * pxPerFt; const cx = width / 2 - gridCenterPx; const cy = height / 2 - gridCenterPx; useStore.getState().setStageTransform(cx, cy, 1); stageRef.current?.scale({ x: 1, y: 1 }); stageRef.current?.position({ x: cx, y: cy }); return }
+        if (e.key === 'g' && !e.shiftKey && !inInput) { e.preventDefault(); useStore.getState().groupSelected(); return }
+        if (e.key === 'g' && e.shiftKey && !inInput)  { e.preventDefault(); useStore.getState().ungroupSelected(); return }
         return
       }
 
@@ -184,6 +224,7 @@ export function DrawingCanvas() {
         if (e.key === 'Delete' || e.key === 'Backspace') {
           useStore.getState().deleteSelectedElements()
           useStore.getState().deleteSelectedDims()
+          useStore.getState().deleteSelectedArcWalls()
         }
 
         // Tool shortcuts (AI-style)
@@ -191,10 +232,13 @@ export function DrawingCanvas() {
         if (e.key === 'h' || e.key === 'H') useStore.getState().setActiveTool('hand')
         if (e.key === 'd' || e.key === 'D') useStore.getState().setActiveTool('dimension')
         if (e.key === 'w' || e.key === 'W') useStore.getState().setActiveTool('wall')
+        if (e.key === 'a' || e.key === 'A') useStore.getState().setActiveTool('diagonal-wall')
+        if (e.key === 'p' || e.key === 'P') useStore.getState().setActiveTool('polygon')
         if (e.key === 's' || e.key === 'S') useStore.getState().setActiveTool('rect')
+        if (e.key === 'c' || e.key === 'C') useStore.getState().setActiveTool('arc-wall')
 
-        // R — rotate 90°
-        if (e.key === 'r' || e.key === 'R') useStore.getState().rotateSelected(90)
+        // R — rotate 90° (Shift+R = 45°)
+        if (e.key === 'r' || e.key === 'R') useStore.getState().rotateSelected(e.shiftKey ? 45 : 90)
 
         // Arrow keys — nudge selected elements (Shift = 10× step)
         const arrowKeys = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight']
@@ -236,7 +280,7 @@ export function DrawingCanvas() {
     if (edgeSnap && projectRef.current) {
       const stageScale = stageRef.current?.scaleX() ?? 1
       const threshold = edgeSnapThresholdFt(pxPerFtRef.current, stageScale)
-      const nearest = nearestSnapPoint(raw, getElementSnapPoints(projectRef.current.elements), threshold)
+      const nearest = nearestSnapPoint(raw, getElementSnapPoints(getActiveElements(useStore.getState())), threshold)
       if (nearest) return nearest
     }
     return { x: snapToGrid(raw.x, snapFeetRef.current), y: snapToGrid(raw.y, snapFeetRef.current) }
@@ -249,7 +293,6 @@ export function DrawingCanvas() {
     if (!stage) return
 
     if (e.evt.ctrlKey) {
-      // Pinch-to-zoom — zoom toward the pointer
       const oldScale = stage.scaleX()
       const pointer = stage.getPointerPosition()
       if (!pointer) return
@@ -260,14 +303,15 @@ export function DrawingCanvas() {
       const newY = pointer.y - to.y * newScale
       stage.scale({ x: newScale, y: newScale })
       stage.position({ x: newX, y: newY })
-      setStageTransform(newX, newY, newScale)
     } else {
-      // Two-finger scroll → pan
-      const newX = stage.x() - e.evt.deltaX
-      const newY = stage.y() - e.evt.deltaY
-      stage.position({ x: newX, y: newY })
-      setStageTransform(newX, newY, stage.scaleX())
+      stage.position({ x: stage.x() - e.evt.deltaX, y: stage.y() - e.evt.deltaY })
     }
+    // Debounce store sync — avoids React re-renders on every scroll tick
+    clearTimeout(wheelSyncTimerRef.current)
+    wheelSyncTimerRef.current = setTimeout(() => {
+      const s = stageRef.current
+      if (s) setStageTransform(s.x(), s.y(), s.scaleX())
+    }, 80)
   }, [setStageTransform])
 
   // ── Mouse down ───────────────────────────────────────────────────────────
@@ -315,10 +359,9 @@ export function DrawingCanvas() {
       const dx = e.evt.clientX - lastMousePos.current.x
       const dy = e.evt.clientY - lastMousePos.current.y
       lastMousePos.current = { x: e.evt.clientX, y: e.evt.clientY }
-      const newX = stage.x() + dx
-      const newY = stage.y() + dy
-      stage.position({ x: newX, y: newY })
-      setStageTransform(newX, newY, stage.scaleX())
+      stage.position({ x: stage.x() + dx, y: stage.y() + dy })
+      // Do NOT call setStageTransform here — it would re-render the entire component
+      // tree at 60fps. Store is synced on mouseup instead.
       return
     }
 
@@ -339,6 +382,14 @@ export function DrawingCanvas() {
 
     const pos = stageRef.current?.getPointerPosition()
     if (!pos) return
+    if (cursorReadoutRef.current) {
+      const ft = screenToFeet(pos)
+      const mode = projectRef.current?.mode
+      cursorReadoutRef.current.style.display = 'block'
+      cursorReadoutRef.current.textContent = mode === 'elevation'
+        ? `x: ${ft.x.toFixed(1)} ft  |  elev: ${(300 - ft.y).toFixed(1)} ft`
+        : `x: ${ft.x.toFixed(1)} ft  |  y: ${ft.y.toFixed(1)} ft`
+    }
     if (activeBloxRef.current) {
       const snapped = getSnappedFeet(pos)
       setPreviewPos(snapped)
@@ -346,7 +397,7 @@ export function DrawingCanvas() {
         const def = getBloxById(activeBloxRef.current)
         // Always read elements from the live store — projectRef.current can lag
         // a React render cycle behind after a wall-split placement.
-        const elements = useStore.getState().project?.elements ?? []
+        const elements = getActiveElements(useStore.getState())
         const stageScale = stageRef.current?.scaleX() ?? 1
         const threshold = edgeSnapThresholdFt(pxPerFtRef.current, stageScale, 30)
         // Use raw (un-grid-snapped) cursor for wall proximity test so grid alignment
@@ -365,7 +416,7 @@ export function DrawingCanvas() {
     if (activeToolRef.current === 'wall') {
       const gridPt = getSnappedFeet(pos)
       if (wallStartRef.current) {
-        const elements = useStore.getState().project?.elements ?? []
+        const elements = getActiveElements(useStore.getState())
         const stageScale = stageRef.current?.scaleX() ?? 1
         const threshFt = edgeSnapThresholdFt(pxPerFtRef.current, stageScale, 20)
         const constrained = constrainToOrthogonal(wallStartRef.current, gridPt)
@@ -380,11 +431,39 @@ export function DrawingCanvas() {
       rectDrawRef.current = draw
       setRectDraw(draw)
     }
+    if (activeToolRef.current === 'polygon') {
+      setPolyCursor(getSnappedFeet(pos))
+    }
+    if (activeToolRef.current === 'arc-wall') {
+      setArcWallCursor(getSnappedFeet(pos))
+    }
+    if (activeToolRef.current === 'diagonal-wall') {
+      const gridPt = getSnappedFeet(pos)
+      if (diagWallStartRef.current && e.evt.shiftKey) {
+        const dx = gridPt.x - diagWallStartRef.current.x
+        const dy = gridPt.y - diagWallStartRef.current.y
+        const len = Math.sqrt(dx * dx + dy * dy)
+        if (len > 0.01) {
+          const snapped = Math.round(Math.atan2(dy, dx) / (Math.PI / 12)) * (Math.PI / 12)
+          setDiagWallCursor({ x: diagWallStartRef.current.x + len * Math.cos(snapped), y: diagWallStartRef.current.y + len * Math.sin(snapped) })
+        } else {
+          setDiagWallCursor(gridPt)
+        }
+      } else {
+        setDiagWallCursor(gridPt)
+      }
+    }
   }, [setStageTransform, screenToFeet, getSnappedFeet])
 
   // ── Mouse up ─────────────────────────────────────────────────────────────
   const handleMouseUp = useCallback((e: Konva.KonvaEventObject<MouseEvent>) => {
+    const wasPanning = isPanning.current
     isPanning.current = false
+    // Sync stage position to store only after an actual pan gesture
+    if (wasPanning) {
+      const stage = stageRef.current
+      if (stage) setStageTransform(stage.x(), stage.y(), stage.scaleX())
+    }
 
     if (isMarqueeActive.current && marqueeStartFt.current) {
       const pos = stageRef.current?.getPointerPosition()
@@ -395,11 +474,18 @@ export function DrawingCanvas() {
       const maxX = Math.max(marqueeStartFt.current.x, endFt.x)
       const maxY = Math.max(marqueeStartFt.current.y, endFt.y)
 
-      const hitEls = (projectRef.current?.elements ?? [])
+      const activeEls = projectRef.current?.mode === 'detail'
+        ? (projectRef.current?.detailElements ?? [])
+        : (projectRef.current?.elements ?? [])
+      const activeDims = projectRef.current?.mode === 'detail'
+        ? (projectRef.current?.detailDimensions ?? [])
+        : (projectRef.current?.dimensions ?? [])
+
+      const hitEls = activeEls
         .filter(el => !(el.x + el.width < minX || el.x > maxX || el.y + el.height < minY || el.y > maxY))
         .map(el => el.id)
 
-      const hitDims = (projectRef.current?.dimensions ?? [])
+      const hitDims = activeDims
         .filter(d => {
           const inRect = (x: number, y: number) => x >= minX && x <= maxX && y >= minY && y <= maxY
           return inRect(d.x1, d.y1) || inRect(d.x2, d.y2)
@@ -431,7 +517,7 @@ export function DrawingCanvas() {
       rectDrawRef.current = null
       setRectDraw(null)
     }
-  }, [screenToFeet, selectMany, clearSelection])
+  }, [screenToFeet, selectMany, clearSelection, setStageTransform])
 
   // ── Stage click ──────────────────────────────────────────────────────────
   const handleStageClick = useCallback((e: Konva.KonvaEventObject<MouseEvent>) => {
@@ -439,6 +525,32 @@ export function DrawingCanvas() {
 
     const pos = stageRef.current?.getPointerPosition()
     if (!pos) return
+
+    // pick_point intercept — resolves pending MCP coordinate request
+    const pickResolver = useStore.getState().pickPointResolver
+    if (pickResolver) {
+      useStore.getState().clearPendingPickPoint()
+      pickResolver(screenToFeet(pos))
+      return
+    }
+
+    // Underlay two-point calibration intercept
+    if (underlayCalModeRef.current === 'two-point-picking') {
+      const stage = stageRef.current
+      if (!stage) return
+      const stageScale = stage.scaleX()
+      const sx = stage.x(), sy = stage.y()
+      const stagePxX = (pos.x - sx) / stageScale
+      const stagePxY = (pos.y - sy) / stageScale
+      const underlay = useStore.getState().project?.underlay
+      if (!underlay) return
+      const pxPerFt = pxPerFtRef.current
+      const { w, h } = computeRenderSize(underlay, pxPerFt)
+      const imgPxX = (stagePxX / w) * underlay.naturalWidth
+      const imgPxY = (stagePxY / h) * underlay.naturalHeight
+      addUnderlayCalibrationPoint({ x: imgPxX, y: imgPxY })
+      return
+    }
 
     // Active blox placement always takes priority — tool mode is irrelevant
     if (activeBloxRef.current) {
@@ -502,19 +614,116 @@ export function DrawingCanvas() {
       return
     }
 
-    // Clear selection on background click
+    // Polygon tool — click to add vertices; double-click or click near start to close
+    if (activeToolRef.current === 'polygon') {
+      const ft = getSnappedFeet(pos)
+      const verts = polyVertsRef.current
+      const CLOSE_THRESHOLD_FT = 0.75
+      const now = Date.now()
+      const isDbl = now - lastPolyClickTime.current < 350
+      lastPolyClickTime.current = now
+
+      if (isDbl && verts.length >= 3) {
+        // Double-click: close with current verts (don't add this point)
+        placePolyRef.current(verts)
+        setPolyVerts([])
+        setPolyCursor(null)
+        return
+      }
+      if (verts.length >= 3) {
+        const first = verts[0]
+        if (Math.hypot(ft.x - first.x, ft.y - first.y) < CLOSE_THRESHOLD_FT) {
+          placePolyRef.current(verts)
+          setPolyVerts([])
+          setPolyCursor(null)
+          return
+        }
+      }
+      setPolyVerts([...verts, ft])
+      return
+    }
+
+    // Arc wall tool — 3-click: center → start endpoint → end endpoint
+    if (activeToolRef.current === 'arc-wall') {
+      const ft = getSnappedFeet(pos)
+      const phase = arcWallPhaseRef.current
+      if (phase === 0) {
+        setArcWallCenter(ft)
+        setArcWallPhase(1)
+      } else if (phase === 1) {
+        setArcWallStart(ft)
+        setArcWallPhase(2)
+      } else {
+        const center = arcWallCenterRef.current!
+        const start = arcWallStartRef.current!
+        const radius = Math.hypot(start.x - center.x, start.y - center.y)
+        const startAngle = Math.atan2(start.y - center.y, start.x - center.x)
+        const endAngle = Math.atan2(ft.y - center.y, ft.x - center.x)
+        const sweep = ((endAngle - startAngle) % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI)
+        if (radius >= 0.5 && sweep > 0.08) {
+          placeArcWallRef.current({ cx: center.x, cy: center.y, radius, startAngle, endAngle, thickness: 0.5 })
+        }
+        setArcWallPhase(0)
+        setArcWallCenter(null)
+        setArcWallStart(null)
+      }
+      return
+    }
+
+    // Diagonal wall tool — two-click free-angle drawing
+    if (activeToolRef.current === 'diagonal-wall') {
+      const gridPt = getSnappedFeet(pos)
+      if (!diagWallStartRef.current) {
+        setDiagWallStart(gridPt)
+      } else {
+        const start = diagWallStartRef.current
+        let dx = gridPt.x - start.x
+        let dy = gridPt.y - start.y
+        const rawLen = Math.sqrt(dx * dx + dy * dy)
+        if (rawLen < 0.25) return
+        if (e.evt.shiftKey) {
+          const snapped = Math.round(Math.atan2(dy, dx) / (Math.PI / 12)) * (Math.PI / 12)
+          dx = rawLen * Math.cos(snapped)
+          dy = rawLen * Math.sin(snapped)
+        }
+        const len = Math.sqrt(dx * dx + dy * dy)
+        const angleDeg = Math.atan2(dy, dx) * (180 / Math.PI)
+        const end = { x: start.x + dx, y: start.y + dy }
+        const cx = (start.x + end.x) / 2
+        const cy = (start.y + end.y) / 2
+        const t = WALL_THICKNESS[activeWallTypeRef.current] ?? 0.5
+        placeRef.current(activeWallTypeRef.current, cx - len / 2, cy - t / 2, len, t, undefined, angleDeg)
+        setDiagWallStart(end)
+      }
+      return
+    }
+
+    // Clear selection on background click; exit group isolation if active
     if (e.target !== e.target.getStage()) {
+      useStore.getState().exitGroup()
       clearSelection()
       return
     }
+    useStore.getState().exitGroup()
     clearSelection()
   }, [getSnappedFeet, addDimension, clearSelection])
 
+  const lastPolyClickTime = useRef(0)
+
+  const handleDblClick = useCallback((_e: Konva.KonvaEventObject<MouseEvent>) => {
+    // Double-click is handled via timing in handleStageClick — nothing to do here
+  }, [])
+
   const handleMouseLeave = useCallback(() => {
-    setPreviewPos(null); setDimCursor(null); setWallCursor(null)
+    setPreviewPos(null); setDimCursor(null); setWallCursor(null); setDiagWallCursor(null)
+    setPolyCursor(null); setArcWallCursor(null)
     wallSnapRef.current = null; setWallSnap(null)
     rectDrawRef.current = null; setRectDraw(null)
-  }, [])
+    if (cursorReadoutRef.current) cursorReadoutRef.current.style.display = 'none'
+    // Sync stage transform to store so pan position is persisted
+    const stage = stageRef.current
+    if (stage) setStageTransform(stage.x(), stage.y(), stage.scaleX())
+  }, [setStageTransform])
 
   if (!project) return null
   const scale = SCALES[project.scale]
@@ -545,11 +754,48 @@ export function DrawingCanvas() {
     ? { x: wallStart.x * pxPerFt, y: wallStart.y * pxPerFt }
     : null
 
-  const cursor = activeBloxId || activeTool === 'dimension' || activeTool === 'wall' || activeTool === 'rect'
+  const cursor = pickPointResolver || activeBloxId || activeTool === 'dimension' || activeTool === 'wall' || activeTool === 'rect' || activeTool === 'diagonal-wall' || activeTool === 'polygon' || activeTool === 'arc-wall'
     ? 'crosshair'
     : activeTool === 'hand' || spaceHeld.current
     ? (isPanning.current ? 'grabbing' : 'grab')
     : 'default'
+
+  // Polygon preview: all placed verts + cursor, with close-snap indicator
+  const POLY_CLOSE_THRESHOLD_FT = 0.75
+  const polyPreviewPts = activeTool === 'polygon' && polyVerts.length > 0 && polyCursor
+    ? (() => {
+        const cursor = polyCursor
+        const first = polyVerts[0]
+        const nearClose = polyVerts.length >= 3 && Math.hypot(cursor.x - first.x, cursor.y - first.y) < POLY_CLOSE_THRESHOLD_FT
+        const tip = nearClose ? first : cursor
+        return {
+          pts: [...polyVerts, tip].flatMap(p => [p.x * pxPerFt, p.y * pxPerFt]),
+          firstPx: { x: first.x * pxPerFt, y: first.y * pxPerFt },
+          nearClose,
+          vertDots: polyVerts.map(v => ({ x: v.x * pxPerFt, y: v.y * pxPerFt }))
+        }
+      })()
+    : null
+
+  const diagWallPreview = activeTool === 'diagonal-wall' && diagWallStart && diagWallCursor
+    ? (() => {
+        const dx = diagWallCursor.x - diagWallStart.x
+        const dy = diagWallCursor.y - diagWallStart.y
+        const lenFt = Math.sqrt(dx * dx + dy * dy)
+        if (lenFt < 0.01) return null
+        const rawAngle = Math.atan2(dy, dx) * (180 / Math.PI)
+        const t = WALL_THICKNESS[activeWallType] ?? 0.5
+        const cx = (diagWallStart.x + diagWallCursor.x) / 2 * pxPerFt
+        const cy = (diagWallStart.y + diagWallCursor.y) / 2 * pxPerFt
+        const normalAngle = ((rawAngle % 180) + 180) % 180
+        const dispAngle = Math.round(normalAngle > 90 ? 180 - normalAngle : normalAngle)
+        return { cx, cy, lenPx: lenFt * pxPerFt, tPx: t * pxPerFt, angleDeg: rawAngle, lenFt, dispAngle }
+      })()
+    : null
+
+  const diagWallStartDot = activeTool === 'diagonal-wall' && diagWallStart
+    ? { x: diagWallStart.x * pxPerFt, y: diagWallStart.y * pxPerFt }
+    : null
 
   const rectPreview = rectDraw ? {
     x: Math.min(rectDraw.startFt.x, rectDraw.endFt.x) * pxPerFt,
@@ -569,17 +815,21 @@ export function DrawingCanvas() {
         scaleX={stageScale} scaleY={stageScale}
         onWheel={handleWheel}
         onClick={handleStageClick}
+        onDblClick={handleDblClick}
         onMouseMove={handleMouseMove}
         onMouseDown={handleMouseDown}
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseLeave}
       >
-        <GridLayer pixelsPerFoot={pxPerFt} />
+        <GridLayer pixelsPerFoot={pxPerFt} mode={project?.mode ?? 'floorplan'} />
+        <UnderlayLayer pixelsPerFoot={pxPerFt} />
+        <ArcWallLayer pixelsPerFoot={pxPerFt} />
         <ElementsLayer pixelsPerFoot={pxPerFt} snapFeet={scale.snapFeet} toolActive={activeTool} />
         <DimensionLayer
-          dimensions={project.dimensions}
+          dimensions={project.mode === 'detail' ? (project.detailDimensions ?? []) : project.dimensions}
           selectedDimIds={selectedDimIds}
           pixelsPerFoot={pxPerFt}
+          mode={project.mode}
           onSelect={(id, multi) => selectDim(id, multi)}
           onOffsetDrag={(id, off) => updateDimension(id, { offset: off })}
           preview={
@@ -617,7 +867,7 @@ export function DrawingCanvas() {
                     fill="rgba(60,60,60,0.45)" stroke="#3C3C3C" strokeWidth={1}
                   />
                   <KText
-                    text={formatFeet(lenFt)}
+                    text={project.mode === 'detail' ? formatInches(lenFt) : formatFeet(lenFt)}
                     x={isHoriz ? labelX - 24 / stageScale : labelX + 4 / stageScale}
                     y={isHoriz ? labelY - 22 / stageScale : labelY - 8 / stageScale}
                     fontSize={fs}
@@ -647,6 +897,87 @@ export function DrawingCanvas() {
           </Layer>
         )}
 
+        {/* Diagonal wall preview */}
+        {(diagWallPreview || diagWallStartDot) && (
+          <Layer listening={false}>
+            {diagWallPreview && (
+              <>
+                <Rect
+                  x={diagWallPreview.cx}
+                  y={diagWallPreview.cy}
+                  width={diagWallPreview.lenPx}
+                  height={diagWallPreview.tPx}
+                  offsetX={diagWallPreview.lenPx / 2}
+                  offsetY={diagWallPreview.tPx / 2}
+                  rotation={diagWallPreview.angleDeg}
+                  fill="rgba(60,60,60,0.45)"
+                  stroke="#3C3C3C"
+                  strokeWidth={1}
+                />
+                <KText
+                  text={`${project.mode === 'detail' ? formatInches(diagWallPreview.lenFt) : formatFeet(diagWallPreview.lenFt)} @ ${diagWallPreview.dispAngle}°`}
+                  x={diagWallPreview.cx}
+                  y={diagWallPreview.cy - 20 / stageScale}
+                  offsetX={30 / stageScale}
+                  fontSize={Math.max(10, 13 / stageScale)}
+                  fontFamily="sans-serif"
+                  fill="#4F9EFF"
+                  stroke="rgba(0,0,0,0.6)"
+                  strokeWidth={2 / stageScale}
+                  fillAfterStrokeEnabled
+                  listening={false}
+                />
+              </>
+            )}
+            {diagWallStartDot && (
+              <>
+                <Line
+                  points={[diagWallStartDot.x - 8 / stageScale, diagWallStartDot.y, diagWallStartDot.x + 8 / stageScale, diagWallStartDot.y]}
+                  stroke="#4F9EFF" strokeWidth={1.5 / stageScale}
+                />
+                <Line
+                  points={[diagWallStartDot.x, diagWallStartDot.y - 8 / stageScale, diagWallStartDot.x, diagWallStartDot.y + 8 / stageScale]}
+                  stroke="#4F9EFF" strokeWidth={1.5 / stageScale}
+                />
+              </>
+            )}
+          </Layer>
+        )}
+
+        {/* Polygon draw preview */}
+        {polyPreviewPts && (
+          <Layer listening={false}>
+            {/* Outline line through all verts + cursor */}
+            <Line
+              points={polyPreviewPts.pts}
+              stroke="#3C3C3C"
+              strokeWidth={1.5 / stageScale}
+              dash={[6 / stageScale, 3 / stageScale]}
+              listening={false}
+            />
+            {/* Close indicator: circle at first vertex when snapping to close */}
+            <Circle
+              x={polyPreviewPts.firstPx.x}
+              y={polyPreviewPts.firstPx.y}
+              radius={(polyPreviewPts.nearClose ? 8 : 4) / stageScale}
+              stroke="#4F9EFF"
+              strokeWidth={1.5 / stageScale}
+              fill={polyPreviewPts.nearClose ? 'rgba(79,158,255,0.3)' : 'transparent'}
+              listening={false}
+            />
+            {/* Vertex dots */}
+            {polyPreviewPts.vertDots.slice(1).map((v, i) => (
+              <Circle
+                key={i}
+                x={v.x} y={v.y}
+                radius={3 / stageScale}
+                fill="#4F9EFF"
+                listening={false}
+              />
+            ))}
+          </Layer>
+        )}
+
         {/* Rectangle draw preview */}
         {rectPreview && rectPreview.w > 0 && rectPreview.h > 0 && (
           <Layer listening={false}>
@@ -656,7 +987,7 @@ export function DrawingCanvas() {
               fill="rgba(255,255,255,0.4)" stroke="#1A1A1A" strokeWidth={1 / stageScale}
             />
             <KText
-              text={`${formatFeet(rectPreview.wFt)} × ${formatFeet(rectPreview.hFt)}`}
+              text={`${project.mode === 'detail' ? formatInches(rectPreview.wFt) : formatFeet(rectPreview.wFt)} × ${project.mode === 'detail' ? formatInches(rectPreview.hFt) : formatFeet(rectPreview.hFt)}`}
               x={rectPreview.x + rectPreview.w / 2}
               y={rectPreview.y + rectPreview.h / 2 - 8 / stageScale}
               offsetX={60 / stageScale}
@@ -668,6 +999,77 @@ export function DrawingCanvas() {
               fillAfterStrokeEnabled
               listening={false}
             />
+          </Layer>
+        )}
+
+        {/* Arc wall drawing preview */}
+        {activeTool === 'arc-wall' && arcWallPhase > 0 && arcWallCenter && (
+          <Layer listening={false}>
+            {/* Center crosshair */}
+            <Line
+              points={[arcWallCenter.x * pxPerFt - 8 / stageScale, arcWallCenter.y * pxPerFt, arcWallCenter.x * pxPerFt + 8 / stageScale, arcWallCenter.y * pxPerFt]}
+              stroke="#4F9EFF" strokeWidth={1.5 / stageScale}
+            />
+            <Line
+              points={[arcWallCenter.x * pxPerFt, arcWallCenter.y * pxPerFt - 8 / stageScale, arcWallCenter.x * pxPerFt, arcWallCenter.y * pxPerFt + 8 / stageScale]}
+              stroke="#4F9EFF" strokeWidth={1.5 / stageScale}
+            />
+
+            {/* Phase 1: radius rubber-band line */}
+            {arcWallPhase === 1 && arcWallCursor && (() => {
+              const radiusFt = Math.hypot(arcWallCursor.x - arcWallCenter.x, arcWallCursor.y - arcWallCenter.y)
+              return (
+                <>
+                  <Line
+                    points={[arcWallCenter.x * pxPerFt, arcWallCenter.y * pxPerFt, arcWallCursor.x * pxPerFt, arcWallCursor.y * pxPerFt]}
+                    stroke="#4F9EFF" strokeWidth={1 / stageScale} dash={[4 / stageScale, 2 / stageScale]}
+                  />
+                  <KText
+                    text={`R = ${formatFeet(radiusFt)}`}
+                    x={arcWallCursor.x * pxPerFt + 10 / stageScale}
+                    y={arcWallCursor.y * pxPerFt - 8 / stageScale}
+                    fontSize={Math.max(10, 12 / stageScale)}
+                    fill="#4F9EFF"
+                    stroke="rgba(0,0,0,0.6)"
+                    strokeWidth={2 / stageScale}
+                    fillAfterStrokeEnabled
+                    listening={false}
+                  />
+                </>
+              )
+            })()}
+
+            {/* Phase 2: arc wall shape preview */}
+            {arcWallPhase === 2 && arcWallStart && arcWallCursor && (() => {
+              const radius = Math.hypot(arcWallStart.x - arcWallCenter.x, arcWallStart.y - arcWallCenter.y)
+              const startAngle = Math.atan2(arcWallStart.y - arcWallCenter.y, arcWallStart.x - arcWallCenter.x)
+              const endAngle = Math.atan2(arcWallCursor.y - arcWallCenter.y, arcWallCursor.x - arcWallCenter.x)
+              const outerR = (radius + 0.25) * pxPerFt
+              const innerR = Math.max(0, (radius - 0.25) * pxPerFt)
+              const cx = arcWallCenter.x * pxPerFt
+              const cy = arcWallCenter.y * pxPerFt
+              return (
+                <>
+                  <Circle
+                    x={arcWallStart.x * pxPerFt} y={arcWallStart.y * pxPerFt}
+                    radius={4 / stageScale} fill="#4F9EFF"
+                  />
+                  <Shape
+                    sceneFunc={(ctx, shape) => {
+                      ctx.beginPath()
+                      ctx.arc(cx, cy, outerR, startAngle, endAngle, false)
+                      ctx.arc(cx, cy, innerR, endAngle, startAngle, true)
+                      ctx.closePath()
+                      ctx.fillStrokeShape(shape)
+                    }}
+                    fill="rgba(60,60,60,0.45)"
+                    stroke="#3C3C3C"
+                    strokeWidth={1}
+                    listening={false}
+                  />
+                </>
+              )
+            })()}
           </Layer>
         )}
 
@@ -685,6 +1087,18 @@ export function DrawingCanvas() {
         )}
       </Stage>
       <ScaleBar scale={project.scale as Scale} pixelsPerFoot={pxPerFt} />
+      <LegendOverlay />
+      <div
+        ref={cursorReadoutRef}
+        style={{
+          display: 'none',
+          position: 'absolute', bottom: 8, right: 8,
+          background: 'rgba(0,0,0,0.72)', color: '#fff',
+          fontFamily: '"SF Mono", "Fira Code", monospace',
+          fontSize: 11, padding: '4px 8px', borderRadius: 4,
+          pointerEvents: 'none', zIndex: 10, lineHeight: 1.5
+        }}
+      />
     </div>
   )
 }

@@ -40,17 +40,449 @@ export const BLOX_DEFINITIONS: BloxDefinition[] = [
   },
 
   {
+    id: 'wall-glazing',
+    name: 'Glazing Wall',
+    category: 'Walls',
+    description: 'Floor-to-ceiling curtain glass / glazing wall',
+    defaultWidth: 8,
+    defaultHeight: 0.375,
+    isResizable: true,
+    resizeAxis: 'x',
+    minWidth: 1,
+    widthPresets: [3, 4, 6, 8, 10, 12, 16],
+    placementNote: 'Height is glass thickness (0.25ft). Place at same x,y as adjacent wall. Width = glazed opening width.'
+  },
+
+  {
     id: 'insulation-batt',
     name: 'Insulation Batt',
-    category: 'Walls',
-    description: 'Fire-separation batt insulation hatch',
-    defaultWidth: 8,
-    defaultHeight: 0.5,
+    category: 'Details',
+    description: 'Batt insulation hatch — wall cavity fill, fire-separation assemblies',
+    defaultWidth: 14.5,
+    defaultHeight: 3.5,
     isResizable: true,
     resizeAxis: 'both',
     minWidth: 1,
+    minHeight: 1,
+    widthPresets: [14.5, 22.5],
+    placementNote: 'Width = cavity (14.5" for 16" OC, 22.5" for 24" OC). Height = stud depth (3.5" for 2×4, 5.5" for 2×6).'
+  },
+  {
+    id: 'detail-drywall',
+    name: 'Gypsum Wallboard',
+    category: 'Details',
+    description: '5/8" Type X gypsum wallboard layer — fire-rated assemblies',
+    defaultWidth: 48,
+    defaultHeight: 0.625,
+    isResizable: true,
+    resizeAxis: 'both',
+    minWidth: 1,
+    minHeight: 0.5,
+    widthPresets: [48, 96],
+    placementNote: 'Height = board thickness (0.625" = 5/8" Type X, 0.5" = 1/2"). Stack two layers per side for 2-hour rating.'
+  },
+  {
+    id: 'detail-stud-2x4',
+    name: '2×4 Stud',
+    category: 'Details',
+    description: '2×4 wood stud cross-section — 1.5" × 3.5" actual',
+    defaultWidth: 1.5,
+    defaultHeight: 3.5,
+    isResizable: true,
+    resizeAxis: 'both',
+    minWidth: 0.5,
+    minHeight: 0.5,
+    placementNote: 'Nominal 2×4: 1.5" wide × 3.5" deep. For 2×6: 1.5" × 5.5". Place at 16" or 24" on center within insulation batt cavity.'
+  },
+  {
+    id: 'detail-stud-2x10',
+    name: '2×10 Stud',
+    category: 'Details',
+    description: '2×10 wood stud cross-section — 1.5" × 9.25" actual',
+    defaultWidth: 1.5,
+    defaultHeight: 9.25,
+    isResizable: true,
+    resizeAxis: 'both',
+    minWidth: 0.5,
+    minHeight: 0.5,
+    placementNote: 'Nominal 2×10: 1.5" wide × 9.25" deep. Common for floor joists and roof rafters.'
+  },
+  {
+    id: 'detail-rafter',
+    name: 'Rafter (Pitched)',
+    category: 'Details',
+    description: 'Rafter with plumb cuts — parallelogram shape that correctly shows the bird\'s mouth and fascia plumb cut without rotation',
+    defaultWidth: 36,
+    defaultHeight: 19.64,
+    isResizable: true,
+    resizeAxis: 'both',
+    minWidth: 6,
+    minHeight: 4,
+    placementNote: 'Width = horizontal overhang extent. Height = total vertical depth (rise + plumb-cut height). Set properties.pitchRise (default 4 for 4:12). For a 4:12 pitch 2×8 rafter: rise=width×(4/12), D_vert=7.25/cos(18.4°)=7.64. Height = rise + 7.64. No rotation needed — shape is already pitched.'
+  },
+  {
+    id: 'detail-pitched-layer',
+    name: 'Pitched Layer',
+    category: 'Details',
+    description: 'Pitched roof layer (shingles, plywood, or felt) with plumb-cut ends — matches rafter geometry without rotation',
+    defaultWidth: 36,
+    defaultHeight: 13.64,
+    isResizable: true,
+    resizeAxis: 'both',
+    minWidth: 4,
+    minHeight: 0.5,
+    placementNote: 'Set properties.pitchRise (default 4) and properties.layerType ("shingles", "plywood", or "felt"). Width = horizontal extent. Height = rise + layer thickness (D_vert). Stack directly above the rafter element — their left/right plumb cuts align automatically.'
+  },
+  {
+    id: 'detail-felt',
+    name: 'Felt Underlayment',
+    category: 'Details',
+    description: 'Roofing felt / underlayment — 15lb or 30lb asphalt-saturated felt between roof deck and shingles',
+    defaultWidth: 48,
+    defaultHeight: 0.125,
+    isResizable: true,
+    resizeAxis: 'both',
+    minWidth: 1,
+    minHeight: 0.0625,
+    placementNote: 'Very thin — default 1/8". Place between plywood roof deck and shingles. Also used as a WRB (weather-resistant barrier) behind cladding.'
+  },
+  {
+    id: 'detail-gutter',
+    name: 'Gutter (K-Style)',
+    category: 'Details',
+    description: 'K-style (ogee profile) rain gutter — standard residential aluminum or vinyl gutter in cross-section',
+    defaultWidth: 5,
+    defaultHeight: 4,
+    isResizable: true,
+    resizeAxis: 'both',
+    minWidth: 2,
+    minHeight: 1.5,
+    placementNote: 'Default 5" wide × 4" tall (standard residential K-style). Also available 4" and 6". Place below the fascia at the eave. The hanging strap attaches to the fascia above.'
+  },
+  {
+    id: 'detail-brick-veneer',
+    name: 'Brick Veneer',
+    category: 'Details',
+    description: 'Brick veneer wall cladding in cross-section — 3⅝" nominal depth with horizontal coursing',
+    defaultWidth: 3.625,
+    defaultHeight: 36,
+    isResizable: true,
+    resizeAxis: 'both',
+    minWidth: 1,
+    minHeight: 2.25,
+    placementNote: 'Standard brick nominal depth: 3⅝" (3.625"). Each course is 2¼" (2.25") tall including mortar joint. Place against exterior sheathing with 1" air gap. Courses shown with horizontal mortar lines and alternating head joints.'
+  },
+  {
+    id: 'detail-stud-2x4-face',
+    name: '2×4 (Face View)',
+    category: 'Details',
+    description: '2×4 wide-face view — 3.5" face visible. Use for horizontal members (plates, headers, sills) in framing elevations.',
+    defaultWidth: 36,
+    defaultHeight: 3.5,
+    isResizable: true,
+    resizeAxis: 'both',
+    minWidth: 0.5,
+    minHeight: 0.5,
+    placementNote: 'Shows the 3.5" wide face of a 2×4. Width = member span. For plates laid flat: span × 3.5" tall shows top face; span × 1.5" tall shows front face (use edge view for that).'
+  },
+  {
+    id: 'detail-stud-2x4-edge',
+    name: '2×4 (Edge View)',
+    category: 'Details',
+    description: '2×4 narrow-edge view — 1.5" edge visible. Use for studs in wall framing elevations.',
+    defaultWidth: 1.5,
+    defaultHeight: 92,
+    isResizable: true,
+    resizeAxis: 'both',
+    minWidth: 0.5,
+    minHeight: 0.5,
+    placementNote: 'Shows the 1.5" narrow edge of a 2×4 stud. Width = 1.5" (always). Height = stud length (typically 92" or 104"). Use at 16" or 24" OC in wall framing elevations.'
+  },
+  {
+    id: 'detail-stud-2x6-edge',
+    name: '2×6 (Edge View)',
+    category: 'Details',
+    description: '2×6 narrow-edge view — 1.5" edge visible. Use for 2×6 studs in wall framing elevations.',
+    defaultWidth: 1.5,
+    defaultHeight: 92,
+    isResizable: true,
+    resizeAxis: 'both',
+    minWidth: 0.5,
+    minHeight: 0.5,
+    placementNote: 'Shows the 1.5" narrow edge of a 2×6 stud. All 2× lumber shares this 1.5" edge dimension.'
+  },
+  {
+    id: 'detail-stud-2x8-edge',
+    name: '2×8 (Edge View)',
+    category: 'Details',
+    description: '2×8 narrow-edge view — 1.5" edge visible. Use for 2×8 studs, rafters, and joists in framing elevations.',
+    defaultWidth: 1.5,
+    defaultHeight: 92,
+    isResizable: true,
+    resizeAxis: 'both',
+    minWidth: 0.5,
+    minHeight: 0.5,
+    placementNote: 'Shows the 1.5" narrow edge of a 2×8.'
+  },
+  {
+    id: 'detail-stud-2x10-edge',
+    name: '2×10 (Edge View)',
+    category: 'Details',
+    description: '2×10 narrow-edge view — 1.5" edge visible.',
+    defaultWidth: 1.5,
+    defaultHeight: 92,
+    isResizable: true,
+    resizeAxis: 'both',
+    minWidth: 0.5,
+    minHeight: 0.5,
+    placementNote: 'Shows the 1.5" narrow edge of a 2×10.'
+  },
+  {
+    id: 'detail-stud-2x12-edge',
+    name: '2×12 (Edge View)',
+    category: 'Details',
+    description: '2×12 narrow-edge view — 1.5" edge visible.',
+    defaultWidth: 1.5,
+    defaultHeight: 92,
+    isResizable: true,
+    resizeAxis: 'both',
+    minWidth: 0.5,
+    minHeight: 0.5,
+    placementNote: 'Shows the 1.5" narrow edge of a 2×12.'
+  },
+  {
+    id: 'detail-stud-2x10-face',
+    name: '2×10 (Face View)',
+    category: 'Details',
+    description: '2×10 face-grain view — use in wall framing elevations for headers and joists',
+    defaultWidth: 36,
+    defaultHeight: 9.25,
+    isResizable: true,
+    resizeAxis: 'both',
+    minWidth: 0.5,
+    minHeight: 0.5,
+    placementNote: 'Shows the face grain of a 2×10 on edge (9.25" depth visible). Width = span (e.g. rough opening width). Use for headers in wall framing elevation details.'
+  },
+  {
+    id: 'detail-stud-2x6',
+    name: '2×6 Stud',
+    category: 'Details',
+    description: '2×6 wood stud cross-section — 1.5" × 5.5" actual',
+    defaultWidth: 1.5,
+    defaultHeight: 5.5,
+    isResizable: true,
+    resizeAxis: 'both',
+    minWidth: 0.5,
+    minHeight: 0.5,
+    placementNote: 'Nominal 2×6: 1.5" wide × 5.5" deep. Common for exterior wall studs and headers.'
+  },
+  {
+    id: 'detail-stud-2x8',
+    name: '2×8 Stud',
+    category: 'Details',
+    description: '2×8 wood member cross-section — 1.5" × 7.25" actual',
+    defaultWidth: 1.5,
+    defaultHeight: 7.25,
+    isResizable: true,
+    resizeAxis: 'both',
+    minWidth: 0.5,
+    minHeight: 0.5,
+    placementNote: 'Nominal 2×8: 1.5" wide × 7.25" deep. Common for floor joists and rafters.'
+  },
+  {
+    id: 'detail-stud-2x12',
+    name: '2×12 Stud',
+    category: 'Details',
+    description: '2×12 wood member cross-section — 1.5" × 11.25" actual',
+    defaultWidth: 1.5,
+    defaultHeight: 11.25,
+    isResizable: true,
+    resizeAxis: 'both',
+    minWidth: 0.5,
+    minHeight: 0.5,
+    placementNote: 'Nominal 2×12: 1.5" wide × 11.25" deep. Common for large headers and floor joists.'
+  },
+  {
+    id: 'detail-post-4x4',
+    name: '4×4 Post',
+    category: 'Details',
+    description: '4×4 wood post cross-section — 3.5" × 3.5" actual',
+    defaultWidth: 3.5,
+    defaultHeight: 3.5,
+    isResizable: true,
+    resizeAxis: 'both',
+    minWidth: 0.5,
+    minHeight: 0.5,
+    placementNote: 'Nominal 4×4: 3.5" × 3.5" actual. Common for deck posts, fence posts, and light structural columns.'
+  },
+  {
+    id: 'detail-stud-2x6-face',
+    name: '2×6 (Face View)',
+    category: 'Details',
+    description: '2×6 face-grain view — 5.5" depth visible, use for rafters, joists, and headers in framing elevations',
+    defaultWidth: 36,
+    defaultHeight: 5.5,
+    isResizable: true,
+    resizeAxis: 'both',
+    minWidth: 0.5,
+    minHeight: 0.5,
+    placementNote: 'Shows the 5.5" depth face of a 2×6 on edge. Width = span. For a vertical stud resize to 1.5" wide × stud height. For a plate laid flat: span wide × 1.5" tall.'
+  },
+  {
+    id: 'detail-stud-2x8-face',
+    name: '2×8 (Face View)',
+    category: 'Details',
+    description: '2×8 face-grain view — rafters, joists, and headers in framing elevations',
+    defaultWidth: 36,
+    defaultHeight: 7.25,
+    isResizable: true,
+    resizeAxis: 'both',
+    minWidth: 0.5,
+    minHeight: 0.5,
+    placementNote: 'Shows the 7.25" depth face of a 2×8 on edge. Use for headers and joists in elevation details.'
+  },
+  {
+    id: 'detail-stud-2x12-face',
+    name: '2×12 (Face View)',
+    category: 'Details',
+    description: '2×12 face-grain view — large headers and floor joists in framing elevations',
+    defaultWidth: 36,
+    defaultHeight: 11.25,
+    isResizable: true,
+    resizeAxis: 'both',
+    minWidth: 0.5,
+    minHeight: 0.5,
+    placementNote: 'Shows the 11.25" depth face of a 2×12 on edge. Use for large headers in elevation details.'
+  },
+  {
+    id: 'detail-post-4x4-face',
+    name: '4×4 Post (Face View)',
+    category: 'Details',
+    description: '4×4 post face-grain view — 3.5" wide face visible. Use for posts and columns in framing elevations.',
+    defaultWidth: 3.5,
+    defaultHeight: 96,
+    isResizable: true,
+    resizeAxis: 'both',
+    minWidth: 0.5,
+    minHeight: 0.5,
+    placementNote: 'Shows the 3.5" × 3.5" square face of a 4×4 post. Width = 3.5", height = post length.'
+  },
+  {
+    id: 'detail-1x-face',
+    name: '1× Lumber (Face View)',
+    category: 'Details',
+    description: '1× finish board face-grain view — fascia, trim, and finish boards in framing elevations',
+    defaultWidth: 0.75,
+    defaultHeight: 5.5,
+    isResizable: true,
+    resizeAxis: 'both',
+    minWidth: 0.25,
+    minHeight: 0.5,
+    placementNote: 'Nominal 1×: 3/4" actual thickness. Default is 1×6 (3/4" × 5.5"). Resize for 1×4 (3.5"), 1×8 (7.25"), 1×10 (9.25"), 1×12 (11.25"). Use for fascia boards, trim, and finish carpentry in elevation details.'
+  },
+  {
+    id: 'detail-plywood',
+    name: 'Plywood / OSB',
+    category: 'Details',
+    description: 'Plywood or OSB sheathing sheet — roof deck, wall sheathing, subfloor',
+    defaultWidth: 48,
+    defaultHeight: 0.75,
+    isResizable: true,
+    resizeAxis: 'both',
+    minWidth: 1,
+    minHeight: 0.125,
+    placementNote: 'Default is 48" wide × 3/4" thick (CDX plywood). Resize height for 1/2" (0.5), 5/8" (0.625), 3/4" (0.75), or 7/16" (0.4375) OSB. Rotate to match roof angle. Shows ply layers in cross-section.'
+  },
+  {
+    id: 'detail-rigid-insulation',
+    name: 'Rigid Insulation',
+    category: 'Details',
+    description: 'Rigid foam board insulation — XPS, EPS, or polyiso panel',
+    defaultWidth: 48,
+    defaultHeight: 2,
+    isResizable: true,
+    resizeAxis: 'both',
+    minWidth: 1,
+    minHeight: 0.5,
+    placementNote: 'Default 48" wide × 2" thick. Common thicknesses: 1", 1.5", 2", 3", 4". Use for continuous insulation on wall exteriors, under slabs, and above roof deck.'
+  },
+  {
+    id: 'detail-vent-baffle',
+    name: 'Ventilation Baffle',
+    category: 'Details',
+    description: 'Air channel baffle between insulation and roof sheathing — maintains eave-to-ridge airflow',
+    defaultWidth: 14.5,
+    defaultHeight: 1.5,
+    isResizable: true,
+    resizeAxis: 'both',
+    minWidth: 2,
     minHeight: 0.25,
-    widthPresets: [4, 6, 8, 10, 12, 16, 20]
+    placementNote: '14.5" wide fits between 16" OC rafters (22.5" for 24" OC). Minimum 1" clear airway recommended. Rotate to match roof pitch. Place between batt insulation and roof sheathing.'
+  },
+  {
+    id: 'detail-soffit-panel',
+    name: 'Soffit Panel',
+    category: 'Details',
+    description: 'Horizontal soffit panel below rafter tails — vented or solid',
+    defaultWidth: 24,
+    defaultHeight: 0.5,
+    isResizable: true,
+    resizeAxis: 'both',
+    minWidth: 2,
+    minHeight: 0.25,
+    placementNote: 'Default 24" wide × 1/2" thick. Shown with vent slots. Use for the horizontal surface enclosing the underside of the roof overhang.'
+  },
+  {
+    id: 'detail-shingles',
+    name: 'Asphalt Shingles',
+    category: 'Details',
+    description: 'Asphalt roof shingles — overlapping courses with tab cutlines',
+    defaultWidth: 36,
+    defaultHeight: 6,
+    isResizable: true,
+    resizeAxis: 'both',
+    minWidth: 4,
+    minHeight: 2,
+    placementNote: 'Shows shingle courses with 5"-6" exposure. Rotate to match roof pitch. Place over plywood roof deck. Width = extent of roof shown in detail.'
+  },
+  {
+    id: 'detail-flashing',
+    name: 'Metal Flashing',
+    category: 'Details',
+    description: 'Metal flashing strip — eave, step, counter, or Z-flashing',
+    defaultWidth: 12,
+    defaultHeight: 0.25,
+    isResizable: true,
+    resizeAxis: 'both',
+    minWidth: 1,
+    minHeight: 0.0625,
+    placementNote: 'Thin metal strip (galvanized steel, aluminum, or copper). Default 12" long × 1/4" visible face. Resize and rotate to suit: eave drip edge, step flashing, counter flashing, or Z-flashing.'
+  },
+  {
+    id: 'detail-lvl-beam',
+    name: 'LVL Beam',
+    category: 'Details',
+    description: 'Laminated veneer lumber (LVL) beam cross-section — horizontal glue-line laminations',
+    defaultWidth: 3.5,
+    defaultHeight: 9.5,
+    isResizable: true,
+    resizeAxis: 'both',
+    minWidth: 0.5,
+    minHeight: 1,
+    placementNote: 'Common depths: 9.5", 11.25", 14", 16". Width = ply count × 1.5" (single ply = 1.5", double = 3"). Horizontal glue-line pattern distinguishes from sawn lumber.'
+  },
+  {
+    id: 'detail-tji-joist',
+    name: 'TJI / I-Joist',
+    category: 'Details',
+    description: 'Engineered wood I-joist cross-section — LVL flanges with OSB web',
+    defaultWidth: 3.5,
+    defaultHeight: 9.5,
+    isResizable: true,
+    resizeAxis: 'both',
+    minWidth: 1,
+    minHeight: 3,
+    placementNote: 'Common depths: 9.5" (TJI 110/210), 11.875" (TJI 360), 14" (TJI 560). Flange width 2.5"–3.5". Use at 16" or 24" OC spacing.'
   },
 
   // ── OPENINGS ─────────────────────────────────────────────────────────────
@@ -64,7 +496,8 @@ export const BLOX_DEFINITIONS: BloxDefinition[] = [
     isResizable: true,
     resizeAxis: 'x',
     minWidth: 1,
-    widthPresets: [2.5, 2.667, 3, 4, 5, 6, 8, 10, 12]
+    widthPresets: [2.5, 2.667, 3, 4, 5, 6, 8, 10, 12],
+    placement: { wallFaceEdge: 'top', fillsWallThickness: true, validRotations: [0, 90, 180, 270] }
   },
   {
     id: 'door-single',
@@ -76,7 +509,8 @@ export const BLOX_DEFINITIONS: BloxDefinition[] = [
     isResizable: true,
     resizeAxis: 'x',
     minWidth: 2,
-    widthPresets: [2, 2.333, 2.5, 2.667, 2.833, 3, 3.5]
+    widthPresets: [2, 2.333, 2.5, 2.667, 2.833, 3, 3.5],
+    placement: { wallFaceEdge: 'top', fillsWallThickness: true, swingIntoRoom: true, hingeEdge: 'left', clearanceFront: 3, validRotations: [0, 90, 180, 270] }
   },
   {
     id: 'door-double',
@@ -88,7 +522,8 @@ export const BLOX_DEFINITIONS: BloxDefinition[] = [
     isResizable: true,
     resizeAxis: 'x',
     minWidth: 4,
-    widthPresets: [4, 5, 6, 7, 8]
+    widthPresets: [4, 5, 6, 7, 8],
+    placement: { wallFaceEdge: 'top', fillsWallThickness: true, swingIntoRoom: true, clearanceFront: 3, validRotations: [0, 90, 180, 270] }
   },
   {
     id: 'door-sliding',
@@ -100,7 +535,47 @@ export const BLOX_DEFINITIONS: BloxDefinition[] = [
     isResizable: true,
     resizeAxis: 'x',
     minWidth: 4,
-    widthPresets: [4, 5, 6, 8]
+    widthPresets: [4, 5, 6, 8],
+    placement: { wallFaceEdge: 'top', fillsWallThickness: true, validRotations: [0, 90, 180, 270] }
+  },
+  {
+    id: 'door-pocket',
+    name: 'Pocket Door',
+    category: 'Openings',
+    description: '3\'0" pocket door — slides into wall cavity',
+    defaultWidth: 3,
+    defaultHeight: 0.5,
+    isResizable: true,
+    resizeAxis: 'x',
+    minWidth: 2,
+    widthPresets: [2, 2.5, 2.667, 3, 3.5],
+    placement: { wallFaceEdge: 'top', fillsWallThickness: true, validRotations: [0, 90, 180, 270] }
+  },
+  {
+    id: 'door-bifold',
+    name: 'Bi-Fold Door',
+    category: 'Openings',
+    description: '3\'0" bi-fold closet door — two folding panels',
+    defaultWidth: 3,
+    defaultHeight: 1.5,
+    isResizable: true,
+    resizeAxis: 'x',
+    minWidth: 2,
+    widthPresets: [2, 2.5, 3, 4, 5, 6],
+    placement: { wallFaceEdge: 'top', fillsWallThickness: true, validRotations: [0, 90, 180, 270] }
+  },
+  {
+    id: 'door-garage',
+    name: 'Garage Door',
+    category: 'Openings',
+    description: '9\'0" overhead garage door',
+    defaultWidth: 9,
+    defaultHeight: 0.5,
+    isResizable: true,
+    resizeAxis: 'x',
+    minWidth: 8,
+    widthPresets: [8, 9, 10, 16, 18],
+    placement: { wallFaceEdge: 'top', fillsWallThickness: true, validRotations: [0, 90, 180, 270] }
   },
   {
     id: 'window-single',
@@ -112,7 +587,8 @@ export const BLOX_DEFINITIONS: BloxDefinition[] = [
     isResizable: true,
     resizeAxis: 'x',
     minWidth: 1.5,
-    widthPresets: [1.5, 2, 2.5, 3, 3.5, 4]
+    widthPresets: [1.5, 2, 2.5, 3, 3.5, 4],
+    placement: { wallFaceEdge: 'top', fillsWallThickness: true, validRotations: [0, 90, 180, 270] }
   },
   {
     id: 'window-double',
@@ -124,7 +600,8 @@ export const BLOX_DEFINITIONS: BloxDefinition[] = [
     isResizable: true,
     resizeAxis: 'x',
     minWidth: 3,
-    widthPresets: [3, 4, 5, 6]
+    widthPresets: [3, 4, 5, 6],
+    placement: { wallFaceEdge: 'top', fillsWallThickness: true, validRotations: [0, 90, 180, 270] }
   },
   {
     id: 'window-multi',
@@ -136,7 +613,8 @@ export const BLOX_DEFINITIONS: BloxDefinition[] = [
     isResizable: true,
     resizeAxis: 'x',
     minWidth: 2,
-    widthPresets: [3, 4, 6, 8, 10, 12]
+    widthPresets: [3, 4, 6, 8, 10, 12],
+    placement: { wallFaceEdge: 'top', fillsWallThickness: true, validRotations: [0, 90, 180, 270] }
   },
 
   // ── STAIRS ───────────────────────────────────────────────────────────────
@@ -177,6 +655,19 @@ export const BLOX_DEFINITIONS: BloxDefinition[] = [
     minHeight: 3
   },
   {
+    id: 'stairs-hatch',
+    name: 'Hatch Stair',
+    category: 'Stairs',
+    description: 'Floor hatch opening with suspended stair — stair descends through slab',
+    defaultWidth: 3,
+    defaultHeight: 6,
+    isResizable: true,
+    resizeAxis: 'both',
+    minWidth: 2,
+    minHeight: 3
+  },
+
+  {
     id: 'handrail',
     name: 'Handrail',
     category: 'Stairs',
@@ -189,6 +680,31 @@ export const BLOX_DEFINITIONS: BloxDefinition[] = [
     widthPresets: [3, 3.5, 4, 5, 6, 8, 10, 12]
   },
 
+  {
+    id: 'fixture-elevator',
+    name: 'Elevator',
+    category: 'Stairs',
+    description: "Passenger elevator shaft — standard 7'×7' cab footprint with door indicator",
+    defaultWidth: 7,
+    defaultHeight: 7,
+    isResizable: true,
+    resizeAxis: 'both',
+    minWidth: 4,
+    minHeight: 4
+  },
+  {
+    id: 'fixture-ramp',
+    name: 'Ramp',
+    category: 'Stairs',
+    description: "Accessible ramp — 5' wide, slope arrow from low to high end",
+    defaultWidth: 5,
+    defaultHeight: 10,
+    isResizable: true,
+    resizeAxis: 'both',
+    minWidth: 3,
+    minHeight: 4
+  },
+
   // ── FIXTURES ─────────────────────────────────────────────────────────────
   {
     id: 'fixture-toilet',
@@ -198,7 +714,8 @@ export const BLOX_DEFINITIONS: BloxDefinition[] = [
     defaultWidth: 1.5,
     defaultHeight: 2.5,
     isResizable: false,
-    resizeAxis: 'none'
+    resizeAxis: 'none',
+    placement: { wallFaceEdge: 'top', intoRoom: 2.5, clearanceFront: 1.5, clearanceSide: 0.75, validRotations: [0, 90, 180, 270], typicalRooms: ['bathroom', 'powder room'] }
   },
   {
     id: 'fixture-sink-lav',
@@ -208,7 +725,8 @@ export const BLOX_DEFINITIONS: BloxDefinition[] = [
     defaultWidth: 1.5,
     defaultHeight: 1.5,
     isResizable: false,
-    resizeAxis: 'none'
+    resizeAxis: 'none',
+    placement: { wallFaceEdge: 'top', intoRoom: 1.5, clearanceFront: 2, validRotations: [0, 90, 180, 270], typicalRooms: ['bathroom', 'powder room'] }
   },
   {
     id: 'fixture-bathtub',
@@ -218,7 +736,8 @@ export const BLOX_DEFINITIONS: BloxDefinition[] = [
     defaultWidth: 2.5,
     defaultHeight: 5,
     isResizable: false,
-    resizeAxis: 'none'
+    resizeAxis: 'none',
+    placement: { wallFaceEdge: 'top', intoRoom: 5, clearanceFront: 0.5, validRotations: [0, 90, 180, 270], typicalRooms: ['bathroom'] }
   },
   {
     id: 'fixture-sink-kitchen',
@@ -228,7 +747,8 @@ export const BLOX_DEFINITIONS: BloxDefinition[] = [
     defaultWidth: 2.75,
     defaultHeight: 1.833,
     isResizable: false,
-    resizeAxis: 'none'
+    resizeAxis: 'none',
+    placement: { wallFaceEdge: 'top', intoRoom: 1.833, clearanceFront: 2, validRotations: [0, 90, 180, 270], typicalRooms: ['kitchen'] }
   },
   {
     id: 'fixture-refrigerator',
@@ -238,7 +758,8 @@ export const BLOX_DEFINITIONS: BloxDefinition[] = [
     defaultWidth: 2.5,
     defaultHeight: 2.5,
     isResizable: false,
-    resizeAxis: 'none'
+    resizeAxis: 'none',
+    placement: { wallFaceEdge: 'top', intoRoom: 2.5, clearanceFront: 1.5, validRotations: [0, 90, 180, 270], typicalRooms: ['kitchen'] }
   },
   {
     id: 'fixture-range',
@@ -248,7 +769,8 @@ export const BLOX_DEFINITIONS: BloxDefinition[] = [
     defaultWidth: 2.5,
     defaultHeight: 2,
     isResizable: false,
-    resizeAxis: 'none'
+    resizeAxis: 'none',
+    placement: { wallFaceEdge: 'top', intoRoom: 2, clearanceFront: 2, validRotations: [0, 90, 180, 270], typicalRooms: ['kitchen'] }
   },
   {
     id: 'fixture-dishwasher',
@@ -258,7 +780,8 @@ export const BLOX_DEFINITIONS: BloxDefinition[] = [
     defaultWidth: 2,
     defaultHeight: 2,
     isResizable: false,
-    resizeAxis: 'none'
+    resizeAxis: 'none',
+    placement: { wallFaceEdge: 'top', intoRoom: 2, clearanceFront: 1.5, validRotations: [0, 90, 180, 270], typicalRooms: ['kitchen'] }
   },
   {
     id: 'fixture-vanity',
@@ -270,7 +793,66 @@ export const BLOX_DEFINITIONS: BloxDefinition[] = [
     isResizable: true,
     resizeAxis: 'x',
     minWidth: 1.5,
-    widthPresets: [1.5, 2, 2.5, 3, 3.5, 4, 5, 6]
+    widthPresets: [1.5, 2, 2.5, 3, 3.5, 4, 5, 6],
+    placement: { wallFaceEdge: 'top', intoRoom: 1.75, clearanceFront: 2, validRotations: [0, 90, 180, 270], typicalRooms: ['bathroom', 'powder room'] }
+  },
+  {
+    id: 'fixture-shower',
+    name: 'Shower Stall',
+    category: 'Fixtures',
+    description: '36"×36" shower stall',
+    defaultWidth: 3,
+    defaultHeight: 3,
+    isResizable: true,
+    resizeAxis: 'both',
+    minWidth: 2.5,
+    minHeight: 2.5,
+    widthPresets: [2.5, 3, 3.5, 4],
+    placement: { wallFaceEdge: 'top', intoRoom: 3, validRotations: [0, 90, 180, 270], typicalRooms: ['bathroom'] }
+  },
+  {
+    id: 'fixture-washer',
+    name: 'Washer',
+    category: 'Fixtures',
+    description: '27"×27" clothes washer',
+    defaultWidth: 2.25,
+    defaultHeight: 2.25,
+    isResizable: false,
+    resizeAxis: 'none',
+    placement: { wallFaceEdge: 'top', intoRoom: 2.25, clearanceFront: 1.5, validRotations: [0, 90, 180, 270], typicalRooms: ['laundry', 'utility'] }
+  },
+  {
+    id: 'fixture-dryer',
+    name: 'Dryer',
+    category: 'Fixtures',
+    description: '27"×27" clothes dryer',
+    defaultWidth: 2.25,
+    defaultHeight: 2.25,
+    isResizable: false,
+    resizeAxis: 'none',
+    placement: { wallFaceEdge: 'top', intoRoom: 2.25, clearanceFront: 1.5, validRotations: [0, 90, 180, 270], typicalRooms: ['laundry', 'utility'] }
+  },
+  {
+    id: 'fixture-water-heater',
+    name: 'Water Heater',
+    category: 'Fixtures',
+    description: '18" diameter tank water heater',
+    defaultWidth: 1.5,
+    defaultHeight: 1.5,
+    isResizable: false,
+    resizeAxis: 'none',
+    placement: { wallFaceEdge: 'top', intoRoom: 1.5, clearanceFront: 0.5, validRotations: [0, 90, 180, 270], typicalRooms: ['utility', 'mechanical'] }
+  },
+  {
+    id: 'fixture-utility-sink',
+    name: 'Utility Sink',
+    category: 'Fixtures',
+    description: '24"×20" utility / laundry sink',
+    defaultWidth: 2,
+    defaultHeight: 1.667,
+    isResizable: false,
+    resizeAxis: 'none',
+    placement: { wallFaceEdge: 'top', intoRoom: 1.667, clearanceFront: 2, validRotations: [0, 90, 180, 270], typicalRooms: ['laundry', 'utility', 'garage'] }
   },
 
   // ── FURNITURE ────────────────────────────────────────────────────────────
@@ -282,7 +864,8 @@ export const BLOX_DEFINITIONS: BloxDefinition[] = [
     defaultWidth: 3.167,
     defaultHeight: 6.25,
     isResizable: false,
-    resizeAxis: 'none'
+    resizeAxis: 'none',
+    placement: { wallFaceEdge: 'top', intoRoom: 6.25, validRotations: [0, 90, 180, 270], typicalRooms: ['bedroom'] }
   },
   {
     id: 'furniture-bed-full',
@@ -292,7 +875,8 @@ export const BLOX_DEFINITIONS: BloxDefinition[] = [
     defaultWidth: 4.5,
     defaultHeight: 6.25,
     isResizable: false,
-    resizeAxis: 'none'
+    resizeAxis: 'none',
+    placement: { wallFaceEdge: 'top', intoRoom: 6.25, validRotations: [0, 90, 180, 270], typicalRooms: ['bedroom'] }
   },
   {
     id: 'furniture-bed-queen',
@@ -302,7 +886,8 @@ export const BLOX_DEFINITIONS: BloxDefinition[] = [
     defaultWidth: 5,
     defaultHeight: 6.667,
     isResizable: false,
-    resizeAxis: 'none'
+    resizeAxis: 'none',
+    placement: { wallFaceEdge: 'top', intoRoom: 6.667, validRotations: [0, 90, 180, 270], typicalRooms: ['bedroom'] }
   },
   {
     id: 'furniture-bed-king',
@@ -312,7 +897,8 @@ export const BLOX_DEFINITIONS: BloxDefinition[] = [
     defaultWidth: 6.333,
     defaultHeight: 6.667,
     isResizable: false,
-    resizeAxis: 'none'
+    resizeAxis: 'none',
+    placement: { wallFaceEdge: 'top', intoRoom: 6.667, validRotations: [0, 90, 180, 270], typicalRooms: ['bedroom'] }
   },
   {
     id: 'furniture-sofa',
@@ -324,7 +910,8 @@ export const BLOX_DEFINITIONS: BloxDefinition[] = [
     isResizable: true,
     resizeAxis: 'x',
     minWidth: 4,
-    widthPresets: [5, 6, 7, 8]
+    widthPresets: [5, 6, 7, 8],
+    placement: { wallFaceEdge: 'top', intoRoom: 2.833, validRotations: [0, 90, 180, 270], typicalRooms: ['living room', 'lounge', 'family room'] }
   },
   {
     id: 'furniture-chair',
@@ -334,7 +921,8 @@ export const BLOX_DEFINITIONS: BloxDefinition[] = [
     defaultWidth: 2.5,
     defaultHeight: 2.5,
     isResizable: false,
-    resizeAxis: 'none'
+    resizeAxis: 'none',
+    placement: { validRotations: [0, 90, 180, 270] }
   },
   {
     id: 'furniture-dining-table',
@@ -347,7 +935,8 @@ export const BLOX_DEFINITIONS: BloxDefinition[] = [
     resizeAxis: 'both',
     minWidth: 3,
     minHeight: 2.5,
-    widthPresets: [4, 5, 6, 7, 8]
+    widthPresets: [4, 5, 6, 7, 8],
+    placement: { validRotations: [0, 90], typicalRooms: ['dining room', 'kitchen'] }
   },
   {
     id: 'furniture-coffee-table',
@@ -359,7 +948,8 @@ export const BLOX_DEFINITIONS: BloxDefinition[] = [
     isResizable: true,
     resizeAxis: 'both',
     minWidth: 2,
-    minHeight: 1.5
+    minHeight: 1.5,
+    placement: { validRotations: [0, 90] }
   },
   {
     id: 'furniture-dresser',
@@ -371,7 +961,8 @@ export const BLOX_DEFINITIONS: BloxDefinition[] = [
     isResizable: true,
     resizeAxis: 'x',
     minWidth: 2,
-    widthPresets: [2.5, 3, 4, 5, 6]
+    widthPresets: [2.5, 3, 4, 5, 6],
+    placement: { wallFaceEdge: 'top', intoRoom: 1.5, validRotations: [0, 90, 180, 270], typicalRooms: ['bedroom'] }
   },
   {
     id: 'furniture-desk',
@@ -383,7 +974,45 @@ export const BLOX_DEFINITIONS: BloxDefinition[] = [
     isResizable: true,
     resizeAxis: 'x',
     minWidth: 3,
-    widthPresets: [4, 5, 6]
+    widthPresets: [4, 5, 6],
+    placement: { wallFaceEdge: 'top', intoRoom: 2.5, validRotations: [0, 90, 180, 270], typicalRooms: ['office', 'bedroom', 'study'] }
+  },
+  {
+    id: 'furniture-nightstand',
+    name: 'Nightstand',
+    category: 'Furniture',
+    description: '20"×20" bedside nightstand',
+    defaultWidth: 1.667,
+    defaultHeight: 1.667,
+    isResizable: false,
+    resizeAxis: 'none',
+    placement: { wallFaceEdge: 'top', intoRoom: 1.667, validRotations: [0, 90, 180, 270], typicalRooms: ['bedroom'] }
+  },
+  {
+    id: 'furniture-bookcase',
+    name: 'Bookcase',
+    category: 'Furniture',
+    description: '36"×12" wall bookcase / shelving unit',
+    defaultWidth: 3,
+    defaultHeight: 1,
+    isResizable: true,
+    resizeAxis: 'x',
+    minWidth: 2,
+    widthPresets: [2, 3, 4, 5, 6, 8],
+    placement: { wallFaceEdge: 'top', intoRoom: 1, validRotations: [0, 90, 180, 270], typicalRooms: ['office', 'living room', 'study'] }
+  },
+  {
+    id: 'furniture-tv-unit',
+    name: 'TV / Media Unit',
+    category: 'Furniture',
+    description: '60"×18" media console',
+    defaultWidth: 5,
+    defaultHeight: 1.5,
+    isResizable: true,
+    resizeAxis: 'x',
+    minWidth: 3,
+    widthPresets: [4, 5, 6, 7, 8],
+    placement: { wallFaceEdge: 'top', intoRoom: 1.5, validRotations: [0, 90, 180, 270], typicalRooms: ['living room', 'bedroom', 'lounge'] }
   },
 
   // ── CASEWORK ─────────────────────────────────────────────────────────────
@@ -397,7 +1026,8 @@ export const BLOX_DEFINITIONS: BloxDefinition[] = [
     isResizable: true,
     resizeAxis: 'x',
     minWidth: 1,
-    widthPresets: [2, 3, 4, 5, 6, 8, 10, 12]
+    widthPresets: [2, 3, 4, 5, 6, 8, 10, 12],
+    placement: { wallFaceEdge: 'top', intoRoom: 2, clearanceFront: 2.5, validRotations: [0, 90, 180, 270], typicalRooms: ['kitchen', 'bathroom', 'utility'] }
   },
   {
     id: 'casework-upper',
@@ -409,7 +1039,8 @@ export const BLOX_DEFINITIONS: BloxDefinition[] = [
     isResizable: true,
     resizeAxis: 'x',
     minWidth: 1,
-    widthPresets: [2, 3, 4, 5, 6, 8, 10, 12]
+    widthPresets: [2, 3, 4, 5, 6, 8, 10, 12],
+    placement: { wallFaceEdge: 'top', intoRoom: 1, validRotations: [0, 90, 180, 270], typicalRooms: ['kitchen', 'bathroom', 'utility'] }
   },
   {
     id: 'casework-island',
@@ -435,8 +1066,60 @@ export const BLOX_DEFINITIONS: BloxDefinition[] = [
     minWidth: 0.75,
     minHeight: 0.75
   },
+  {
+    id: 'casework-pantry',
+    name: 'Pantry Cabinet',
+    category: 'Casework',
+    description: '24"×24" full-height pantry cabinet',
+    defaultWidth: 2,
+    defaultHeight: 2,
+    isResizable: true,
+    resizeAxis: 'x',
+    minWidth: 1.5,
+    widthPresets: [1.5, 2, 2.5, 3],
+    placement: { wallFaceEdge: 'top', intoRoom: 2, clearanceFront: 2.5, validRotations: [0, 90, 180, 270], typicalRooms: ['kitchen', 'utility'] }
+  },
+  {
+    id: 'casework-closet-rod',
+    name: 'Closet Rod & Shelf',
+    category: 'Casework',
+    description: '48"×24" reach-in closet with hanging rod and shelf above',
+    defaultWidth: 4,
+    defaultHeight: 2,
+    isResizable: true,
+    resizeAxis: 'x',
+    minWidth: 2,
+    widthPresets: [2, 3, 4, 5, 6, 8],
+    placement: { wallFaceEdge: 'top', intoRoom: 2, validRotations: [0, 90, 180, 270], typicalRooms: ['bedroom', 'closet'] }
+  },
 
   // ── STRUCTURAL ───────────────────────────────────────────────────────────
+  {
+    id: 'structural-fireplace',
+    name: 'Fireplace / Hearth',
+    category: 'Structural',
+    description: 'Masonry fireplace with firebox opening — stone surround',
+    defaultWidth: 5,
+    defaultHeight: 3,
+    isResizable: true,
+    resizeAxis: 'both',
+    minWidth: 2,
+    minHeight: 1.5,
+    widthPresets: [3, 4, 5, 6, 8]
+  },
+  {
+    id: 'structural-masonry-mass',
+    name: 'Masonry Mass',
+    category: 'Structural',
+    description: 'Solid stone or boulder outcropping — rubble masonry fill',
+    defaultWidth: 4,
+    defaultHeight: 4,
+    isResizable: true,
+    resizeAxis: 'both',
+    minWidth: 1,
+    minHeight: 1
+  },
+
   {
     id: 'structural-column-sq',
     name: 'Square Column',
@@ -461,20 +1144,46 @@ export const BLOX_DEFINITIONS: BloxDefinition[] = [
     minWidth: 0.5,
     minHeight: 0.5
   },
+  {
+    id: 'structural-beam',
+    name: 'Structural Beam',
+    category: 'Structural',
+    description: 'Steel or LVL beam — plan view double-line symbol',
+    defaultWidth: 10,
+    defaultHeight: 0.5,
+    isResizable: true,
+    resizeAxis: 'both',
+    minWidth: 2,
+    minHeight: 0.25,
+    widthPresets: [6, 8, 10, 12, 16, 20, 24]
+  },
+  {
+    id: 'structural-footing',
+    name: 'Spread Footing',
+    category: 'Structural',
+    description: '4\'×4\' concrete spread footing — pad foundation',
+    defaultWidth: 4,
+    defaultHeight: 4,
+    isResizable: true,
+    resizeAxis: 'both',
+    minWidth: 1,
+    minHeight: 1
+  },
 
   // ── ANNOTATIONS ──────────────────────────────────────────────────────────
   {
-    id: 'room-label',
-    name: 'Room Label',
+    id: 'terrace-edge',
+    name: 'Terrace Edge',
     category: 'Annotations',
-    description: 'Room name and area annotation',
-    defaultWidth: 8,
-    defaultHeight: 6,
+    description: 'Cantilevered slab / terrace boundary — solid on building side, dashed on open edge',
+    defaultWidth: 10,
+    defaultHeight: 0.5,
     isResizable: true,
-    resizeAxis: 'both',
-    minWidth: 3,
-    minHeight: 2
+    resizeAxis: 'x',
+    minWidth: 2,
+    widthPresets: [4, 6, 8, 10, 12, 16, 20]
   },
+
   {
     id: 'north-arrow',
     name: 'North Arrow',
@@ -519,18 +1228,83 @@ export const BLOX_DEFINITIONS: BloxDefinition[] = [
     resizeAxis: 'none'
   },
 
-  // ── SHAPES ───────────────────────────────────────────────────────────────
+  // ── ANNOTATION SYMBOLS ───────────────────────────────────────────────────
   {
-    id: 'shape-rect',
-    name: 'Rectangle',
+    id: 'annotation-leader',
+    name: 'Leader Arrow',
     category: 'Annotations',
-    description: 'General-purpose rectangle / area shape',
-    defaultWidth: 4,
-    defaultHeight: 4,
+    description: 'Straight leader line with arrowhead and text label — general callout',
+    defaultWidth: 6,
+    defaultHeight: 2,
     isResizable: true,
     resizeAxis: 'both',
-    minWidth: 0.25,
-    minHeight: 0.25
+    minWidth: 2,
+    minHeight: 1
+  },
+  {
+    id: 'annotation-section-cut',
+    name: 'Section Cut',
+    category: 'Annotations',
+    description: 'Section cut line with directional arrows and label (e.g. A-A)',
+    defaultWidth: 10,
+    defaultHeight: 1,
+    isResizable: true,
+    resizeAxis: 'x',
+    minWidth: 4
+  },
+  {
+    id: 'annotation-grid-bubble',
+    name: 'Grid Bubble',
+    category: 'Annotations',
+    description: 'Column grid line with circle bubble containing a letter or number',
+    defaultWidth: 1.5,
+    defaultHeight: 10,
+    isResizable: true,
+    resizeAxis: 'y',
+    minHeight: 4
+  },
+  {
+    id: 'annotation-break-line',
+    name: 'Break Line',
+    category: 'Annotations',
+    description: 'Zigzag break line indicating a portion of the drawing is omitted',
+    defaultWidth: 8,
+    defaultHeight: 1,
+    isResizable: true,
+    resizeAxis: 'x',
+    minWidth: 3
+  },
+  {
+    id: 'annotation-elevation-marker',
+    name: 'Elevation Marker',
+    category: 'Annotations',
+    description: 'Interior elevation reference marker — circle with arrow pointing to view direction',
+    defaultWidth: 2,
+    defaultHeight: 2,
+    isResizable: false,
+    resizeAxis: 'none'
+  },
+  {
+    id: 'annotation-detail-bubble',
+    name: 'Detail Bubble',
+    category: 'Annotations',
+    description: 'Detail callout bubble — circle with detail number and sheet reference',
+    defaultWidth: 2,
+    defaultHeight: 2,
+    isResizable: false,
+    resizeAxis: 'none'
+  },
+  {
+    id: 'annotation-revision-cloud',
+    name: 'Revision Cloud',
+    category: 'Annotations',
+    description: 'Revision cloud to mark areas of change on a drawing',
+    defaultWidth: 8,
+    defaultHeight: 5,
+    isResizable: true,
+    resizeAxis: 'both',
+    minWidth: 3,
+    minHeight: 2
   },
 
   // ── FIRE/SAFETY ──────────────────────────────────────────────────────────
@@ -573,7 +1347,498 @@ export const BLOX_DEFINITIONS: BloxDefinition[] = [
     defaultHeight: 0.75,
     isResizable: false,
     resizeAxis: 'none'
-  }
+  },
+
+  // ── ELEVATION ─────────────────────────────────────────────────────────────
+  // Coordinate note: elevation canvas is 200ft wide × 300ft tall.
+  // MCP uses natural elevation coords: y = elevation from ground (0 = ground, 300 = top).
+  // Use anchor "bottom-left" so y = sill/base height of the element.
+  {
+    id: 'elev-wall-face',
+    name: 'Wall Face',
+    category: 'Elevation',
+    description: 'Building wall surface — smooth concrete or stucco finish',
+    defaultWidth: 20,
+    defaultHeight: 10,
+    isResizable: true,
+    resizeAxis: 'both',
+    minWidth: 1,
+    minHeight: 1,
+    placementNote: 'Main building wall surface. Elevation canvas is 200ft wide × 300ft tall. Use anchor "bottom-left" and y = elevation of bottom edge from ground.'
+  },
+  {
+    id: 'elev-cantilever-slab',
+    name: 'Cantilever Slab',
+    category: 'Elevation',
+    description: 'Projecting horizontal floor or roof slab — terrace, balcony, or roof deck',
+    defaultWidth: 20,
+    defaultHeight: 1,
+    isResizable: true,
+    resizeAxis: 'both',
+    minWidth: 2,
+    minHeight: 0.25,
+    widthPresets: [8, 12, 16, 20, 24, 30],
+    placementNote: 'Set height = slab thickness (typically 0.5–1.5ft). Shadow band renders on underside automatically. Use anchor "bottom-left" and y = elevation of slab bottom.'
+  },
+  {
+    id: 'elev-pier',
+    name: 'Structural Pier',
+    category: 'Elevation',
+    description: 'Vertical concrete or stone structural pier — exposed column under cantilevers',
+    defaultWidth: 2,
+    defaultHeight: 10,
+    isResizable: true,
+    resizeAxis: 'both',
+    minWidth: 0.5,
+    minHeight: 1,
+    widthPresets: [1, 1.5, 2, 2.5, 3]
+  },
+  {
+    id: 'elev-ribbon-window',
+    name: 'Ribbon Window',
+    category: 'Elevation',
+    description: 'Continuous horizontal glazing band with vertical mullions',
+    defaultWidth: 12,
+    defaultHeight: 3.5,
+    isResizable: true,
+    resizeAxis: 'both',
+    minWidth: 2,
+    minHeight: 1,
+    widthPresets: [6, 8, 10, 12, 16, 20, 24],
+    placementNote: 'Mullions auto-space every 2ft. Sill height = bottom elevation of element.'
+  },
+  {
+    id: 'elev-window-face',
+    name: 'Window (Elevation)',
+    category: 'Elevation',
+    description: 'Single window as seen from outside — frame, glass, sill',
+    defaultWidth: 3,
+    defaultHeight: 4,
+    isResizable: true,
+    resizeAxis: 'both',
+    minWidth: 1.5,
+    minHeight: 2,
+    widthPresets: [2, 2.5, 3, 4, 5, 6]
+  },
+  {
+    id: 'elev-window-double-hung',
+    name: 'Window — Double Hung',
+    category: 'Elevation',
+    description: 'Double-hung window elevation — two operable sashes, meeting rail, glazing bars, projecting stone sill',
+    defaultWidth: 3,
+    defaultHeight: 5,
+    isResizable: true,
+    resizeAxis: 'both',
+    minWidth: 1.5,
+    minHeight: 3,
+    widthPresets: [2, 2.5, 3, 3.5, 4, 5],
+    placementNote: 'Use anchor "bottom-left" and y = sill elevation. Properties: glassColor (hex/rgba). Meeting rail sits at mid-height; each sash has a center bar and horizontal glazing bar.'
+  },
+  {
+    id: 'elev-window-single-hung',
+    name: 'Window — Single Hung',
+    category: 'Elevation',
+    description: 'Single-hung window — fixed upper sash (divided light 2×2), operable lower sash',
+    defaultWidth: 3,
+    defaultHeight: 5,
+    isResizable: true,
+    resizeAxis: 'both',
+    minWidth: 1.5,
+    minHeight: 3,
+    widthPresets: [2, 2.5, 3, 3.5, 4, 5],
+    placementNote: 'Upper sash fixed with horizontal and vertical glazing bars. Lower sash operable with center bar only. Stone sill projects past frame.'
+  },
+  {
+    id: 'elev-window-casement',
+    name: 'Window — Casement',
+    category: 'Elevation',
+    description: 'Side-hinged casement window — shows swing arc and handle. Properties: hingeLeft (boolean, default true)',
+    defaultWidth: 2.5,
+    defaultHeight: 4.5,
+    isResizable: true,
+    resizeAxis: 'both',
+    minWidth: 1.5,
+    minHeight: 2,
+    widthPresets: [2, 2.5, 3, 3.5, 4],
+    placementNote: 'Properties: hingeLeft (true/false). Dashed arc shows swing direction. Handle nib on opposite side.'
+  },
+  {
+    id: 'elev-window-fixed',
+    name: 'Window — Fixed / Picture',
+    category: 'Elevation',
+    description: 'Fixed (non-operable) picture window — no sash, single glass pane with glare highlight',
+    defaultWidth: 4,
+    defaultHeight: 5,
+    isResizable: true,
+    resizeAxis: 'both',
+    minWidth: 2,
+    minHeight: 2,
+    widthPresets: [3, 4, 5, 6, 8, 10],
+    placementNote: 'No operable sash. Use for large picture windows or show windows. Stone sill projects past frame.'
+  },
+  {
+    id: 'elev-window-arched',
+    name: 'Window — Arched',
+    category: 'Elevation',
+    description: 'Semicircular arch window with radiating muntins and keystone — classic brownstone / Romanesque style',
+    defaultWidth: 3.5,
+    defaultHeight: 6,
+    isResizable: true,
+    resizeAxis: 'both',
+    minWidth: 2,
+    minHeight: 3,
+    widthPresets: [2.5, 3, 3.5, 4, 5, 6],
+    placementNote: 'Arch height = half the width (semicircle). Radiating muntins auto-spaced. Keystone at crown. Rectangular double-hung sash below spring line if height allows.'
+  },
+  {
+    id: 'elev-window-surround',
+    name: 'Window Surround (Brownstone Molding)',
+    category: 'Elevation',
+    description: 'Classic brownstone stone architrave — outer jamb bands, top lintel with keystone. Overlay this on any window.',
+    defaultWidth: 4,
+    defaultHeight: 6,
+    isResizable: true,
+    resizeAxis: 'both',
+    minWidth: 2,
+    minHeight: 3,
+    widthPresets: [2.5, 3, 3.5, 4, 5, 6],
+    placementNote: 'Place at the same x,y and width,height as the window it surrounds. The interior is transparent — the window shows through. The surround adds jamb moldings and a lintel with keystone on top.'
+  },
+  {
+    id: 'elev-stair-front',
+    name: 'Stair — Front View (Stoop)',
+    category: 'Elevation',
+    description: 'Front-facing perspective view of exterior stoop steps — for brownstone and townhouse stoop elevations',
+    defaultWidth: 12,
+    defaultHeight: 4,
+    isResizable: true,
+    resizeAxis: 'both',
+    minWidth: 4,
+    minHeight: 1,
+    placementNote: 'Use anchor "bottom-left" and y = 0 (grade). Properties: stepCount (auto-computed from height if omitted). Steps drawn with perspective narrowing showing riser faces and tread tops.'
+  },
+  {
+    id: 'elev-door-face',
+    name: 'Door (Elevation)',
+    category: 'Elevation',
+    description: 'Exterior door as seen from outside — frame, panel, threshold',
+    defaultWidth: 3,
+    defaultHeight: 7,
+    isResizable: true,
+    resizeAxis: 'x',
+    minWidth: 2,
+    widthPresets: [2.5, 3, 3.5, 4, 6]
+  },
+  {
+    id: 'elev-curtain-wall',
+    name: 'Curtain Wall',
+    category: 'Elevation',
+    description: 'Floor-to-ceiling glazing system with horizontal and vertical mullion grid',
+    defaultWidth: 12,
+    defaultHeight: 10,
+    isResizable: true,
+    resizeAxis: 'both',
+    minWidth: 2,
+    minHeight: 2,
+    widthPresets: [6, 8, 10, 12, 16, 20]
+  },
+  {
+    id: 'elev-grade-line',
+    name: 'Grade / Ground',
+    category: 'Elevation',
+    description: 'Ground surface and earth fill below grade — heavy top line with earth hatch',
+    defaultWidth: 40,
+    defaultHeight: 3,
+    isResizable: true,
+    resizeAxis: 'both',
+    minWidth: 4,
+    minHeight: 1,
+    widthPresets: [20, 30, 40, 60, 80, 100],
+    placementNote: 'Place with y=0, anchor "bottom-left" to sit at ground datum. Height = depth of earth fill shown (e.g. 3ft). Top line is the grade surface.'
+  },
+  {
+    id: 'elev-shadow-band',
+    name: 'Shadow Band',
+    category: 'Elevation',
+    description: 'Dark soffit shadow — place on underside of cantilever slabs',
+    defaultWidth: 20,
+    defaultHeight: 0.5,
+    isResizable: true,
+    resizeAxis: 'both',
+    minWidth: 1,
+    minHeight: 0.25,
+    placementNote: 'Place immediately below a cantilever slab. Width = slab width, height = shadow depth (0.25–1ft). Use near-black fill.'
+  },
+  {
+    id: 'elev-parapet',
+    name: 'Parapet / Coping',
+    category: 'Elevation',
+    description: 'Low wall at roof edge — coping cap with fascia face',
+    defaultWidth: 20,
+    defaultHeight: 1.5,
+    isResizable: true,
+    resizeAxis: 'both',
+    minWidth: 2,
+    minHeight: 0.5,
+    widthPresets: [8, 12, 16, 20, 24, 30]
+  },
+  {
+    id: 'elev-louver-fins',
+    name: 'Louver Fins',
+    category: 'Elevation',
+    description: 'Repeating angled facade fins — sun shading, brise-soleil, parking screen, copper louvers',
+    defaultWidth: 20,
+    defaultHeight: 3,
+    isResizable: true,
+    resizeAxis: 'both',
+    minWidth: 2,
+    minHeight: 0.5,
+    widthPresets: [8, 12, 16, 20, 24, 30],
+    placementNote: 'Properties: angleDeg (fin angle from horizontal, default 30), finCount (auto-computed from height if omitted), fillColor (hex, e.g. "#B87333" for copper). Place with anchor "bottom-left" and y = sill elevation.'
+  },
+  {
+    id: 'elev-spire',
+    name: 'Spire / Finial',
+    category: 'Elevation',
+    description: 'Tapering needle spire with finial cap — steeples, antennae, tower crowns, flagpoles',
+    defaultWidth: 3,
+    defaultHeight: 30,
+    isResizable: true,
+    resizeAxis: 'both',
+    minWidth: 0.5,
+    minHeight: 2,
+    widthPresets: [1, 1.5, 2, 3, 4, 6],
+    placementNote: 'Tapers from full width at base to a point at top with small finial cap. Properties: fillColor (hex, default copper). Place with anchor "bottom-left" and y = base elevation.'
+  },
+  {
+    id: 'elev-spandrel-panel',
+    name: 'Spandrel Panel',
+    category: 'Elevation',
+    description: 'Opaque facade panel between floor slabs — copper, aluminum, or painted metal cladding',
+    defaultWidth: 20,
+    defaultHeight: 2,
+    isResizable: true,
+    resizeAxis: 'both',
+    minWidth: 1,
+    minHeight: 0.25,
+    widthPresets: [6, 8, 10, 12, 16, 20, 24, 30],
+    placementNote: 'Properties: fillColor (hex, e.g. "#B87333" for copper, "#9CA3AF" for aluminum). Use with elev-ribbon-window or elev-curtain-wall in alternating bands. Place with anchor "bottom-left".'
+  },
+  {
+    id: 'elev-floor-level-marker',
+    name: 'Floor Level Marker',
+    category: 'Elevation',
+    description: 'Horizontal datum line with floor label — standard elevation drawing annotation',
+    defaultWidth: 40,
+    defaultHeight: 1,
+    isResizable: true,
+    resizeAxis: 'both',
+    minWidth: 5,
+    minHeight: 0.5,
+    widthPresets: [20, 30, 40, 60, 80],
+    placementNote: 'Properties: floorLabel (string, e.g. "FL 7 / 79\'-6\\""). The datum line sits at the top edge of the element. Place with anchor "bottom-left" and y = floor elevation so the line lands exactly at that elevation.'
+  },
+  {
+    id: 'elev-material-callout',
+    name: 'Material Callout',
+    category: 'Elevation',
+    description: 'Leader line with material label — standard callout for identifying facade and structural materials',
+    defaultWidth: 8,
+    defaultHeight: 3,
+    isResizable: true,
+    resizeAxis: 'both',
+    minWidth: 2,
+    minHeight: 1,
+    placementNote: 'Properties: material (label text, e.g. "COPPER SPANDREL PANEL", "PIGMENTED CONC.", "GOLD ANOD. GLASS"). Leader dot is at center-left; label text fills the right portion.'
+  },
+  {
+    id: 'elev-angled-panel',
+    name: 'Angled Panel',
+    category: 'Elevation',
+    description: 'Parallelogram-shaped facade panel for angled or diagonal grid geometry — use for 30° or 45° bay systems',
+    defaultWidth: 10,
+    defaultHeight: 8,
+    isResizable: true,
+    resizeAxis: 'both',
+    minWidth: 1,
+    minHeight: 1,
+    widthPresets: [4, 6, 8, 10, 12, 16, 20],
+    placementNote: 'Properties: angleDeg (skew angle in degrees, positive = leans right, default 30), fillColor (hex, default semi-transparent white). Shape extends outside bounding box — leave margin around adjacent elements.'
+  },
+  {
+    id: 'elev-bay-window',
+    name: 'Bay Window',
+    category: 'Elevation',
+    description: 'Projecting bay window — center face + two angled side returns with depth-perspective illusion. Each return has one double-hung window; center has one. Total 3 windows.',
+    defaultWidth: 12,
+    defaultHeight: 10,
+    isResizable: true,
+    resizeAxis: 'both',
+    minWidth: 6,
+    minHeight: 5,
+    widthPresets: [8, 10, 12, 14, 16, 18],
+    placementNote: 'Use anchor "bottom-left" and y = sill elevation. Width = full visible bay width from the front. Properties: glassColor (hex). Brick crown and base band included. Return faces are drawn darker to show shadow/depth.'
+  },
+  {
+    id: 'elev-railing',
+    name: 'Railing',
+    category: 'Elevation',
+    description: 'Balcony or stair railing — top rail with vertical balusters',
+    defaultWidth: 6,
+    defaultHeight: 3.5,
+    isResizable: true,
+    resizeAxis: 'x',
+    minWidth: 2,
+    widthPresets: [3, 4, 6, 8, 10, 12, 16],
+    placementNote: 'Default height 3.5ft (42" IBC guard rail). Use anchor "bottom-left" and y = floor elevation. Properties: fillColor (rail/post color).'
+  },
+  {
+    id: 'elev-siding',
+    name: 'Horizontal Siding',
+    category: 'Elevation',
+    description: 'Horizontal lap siding — wood, fiber cement, or vinyl clapboard',
+    defaultWidth: 20,
+    defaultHeight: 8,
+    isResizable: true,
+    resizeAxis: 'both',
+    minWidth: 2,
+    minHeight: 1,
+    widthPresets: [8, 12, 16, 20, 24, 30],
+    placementNote: 'Properties: fillColor (hex, e.g. "#C8B090" for wood, "#E8E8E8" for painted white). Use with elev-wall-face underneath. Place with anchor "bottom-left".'
+  },
+
+  // ── NEW ANNOTATION SYMBOLS ───────────────────────────────────────────────
+  {
+    id: 'annotation-elevation-target',
+    name: 'Interior Elevation Target',
+    category: 'Annotations',
+    description: 'Interior elevation reference marker — split circle with view number (top) and sheet number (bottom), with directional arrow. Place on floor plans.',
+    defaultWidth: 2.5,
+    defaultHeight: 2.5,
+    isResizable: false,
+    resizeAxis: 'none'
+  },
+  {
+    id: 'annotation-room-tag',
+    name: 'Room Tag',
+    category: 'Annotations',
+    description: 'Room name, area, and number tag — name on top, area and optional room number below',
+    defaultWidth: 6,
+    defaultHeight: 2,
+    isResizable: true,
+    resizeAxis: 'both',
+    minWidth: 2,
+    minHeight: 1
+  },
+  {
+    id: 'annotation-door-tag',
+    name: 'Door Tag',
+    category: 'Annotations',
+    description: 'Door schedule number tag — regular hexagon with door number/letter inside',
+    defaultWidth: 1.5,
+    defaultHeight: 1.5,
+    isResizable: false,
+    resizeAxis: 'none'
+  },
+  {
+    id: 'annotation-section-ref',
+    name: 'Section Reference',
+    category: 'Annotations',
+    description: 'Standalone section reference bubble — split circle with section number (top) and sheet number (bottom). Place at either end of a section cut.',
+    defaultWidth: 2.5,
+    defaultHeight: 2.5,
+    isResizable: false,
+    resizeAxis: 'none'
+  },
+  {
+    id: 'annotation-column-grid-h',
+    name: 'Column Grid (Horizontal)',
+    category: 'Annotations',
+    description: 'Horizontal structural grid axis line with circle bubble at right end — for column lines running left-to-right',
+    defaultWidth: 10,
+    defaultHeight: 1.5,
+    isResizable: true,
+    resizeAxis: 'x',
+    minWidth: 4
+  },
+  {
+    id: 'annotation-drawing-title',
+    name: 'Drawing Title',
+    category: 'Annotations',
+    description: 'View title — reference circle on left, bold uppercase title, hairline underline extending full width, drawing number and scale below. Standard AEC view title convention.',
+    defaultWidth: 12,
+    defaultHeight: 2,
+    isResizable: true,
+    resizeAxis: 'x',
+    minWidth: 5
+  },
+  {
+    id: 'annotation-back-reference',
+    name: 'Back Reference Target',
+    category: 'Annotations',
+    description: 'Back reference target — flag-shaped pentagon with reference number (top) and sheet number (bottom). Points to the source drawing.',
+    defaultWidth: 3,
+    defaultHeight: 2,
+    isResizable: false,
+    resizeAxis: 'none'
+  },
+  {
+    id: 'annotation-floor-elevation',
+    name: 'Floor Elevation Marker',
+    category: 'Annotations',
+    description: 'Elevation datum line — label (elevation + floor description) on left, hairline extending right with crosshair tick at end. Standard elevation drawing convention.',
+    defaultWidth: 10,
+    defaultHeight: 1.5,
+    isResizable: true,
+    resizeAxis: 'x',
+    minWidth: 4
+  },
+  {
+    id: 'annotation-work-point',
+    name: 'Work Point Target',
+    category: 'Annotations',
+    description: 'Reference work point — circle with centered X crosshair. Marks precise reference coordinates on drawings.',
+    defaultWidth: 1.5,
+    defaultHeight: 1.5,
+    isResizable: false,
+    resizeAxis: 'none'
+  },
+  {
+    id: 'annotation-revision-delta',
+    name: 'Revision Delta',
+    category: 'Annotations',
+    description: 'Revision marker — filled equilateral triangle (delta) with revision number/letter inside. Placed to flag revised areas.',
+    defaultWidth: 1.5,
+    defaultHeight: 1.5,
+    isResizable: false,
+    resizeAxis: 'none'
+  },
+
+  // ── FIRE-RATED WALLS ─────────────────────────────────────────────────────
+  {
+    id: 'wall-fire-1hr',
+    name: '1-HR Fire Rated Wall',
+    category: 'Walls',
+    description: '1-hour UL fire-rated wall assembly — wall with diagonal fire-rating hatch and "1HR" label',
+    defaultWidth: 10,
+    defaultHeight: 0.5,
+    isResizable: true,
+    resizeAxis: 'x',
+    minWidth: 1,
+    widthPresets: [4, 6, 8, 10, 12, 16, 20]
+  },
+  {
+    id: 'wall-fire-2hr',
+    name: '2-HR Fire Rated Wall',
+    category: 'Walls',
+    description: '2-hour UL fire-rated wall assembly — wall with crosshatch fire-rating pattern and "2HR" label',
+    defaultWidth: 10,
+    defaultHeight: 0.5,
+    isResizable: true,
+    resizeAxis: 'x',
+    minWidth: 1,
+    widthPresets: [4, 6, 8, 10, 12, 16, 20]
+  },
 ]
 
 export function getBloxById(id: string): BloxDefinition | undefined {
@@ -588,6 +1853,21 @@ export const BLOX_CATEGORIES = [
   'Furniture',
   'Casework',
   'Structural',
+  'Details',
   'Annotations',
-  'Fire/Safety'
+  'Fire/Safety',
+  'Elevation',
+] as const
+
+export const FLOORPLAN_CATEGORIES = [
+  'Walls', 'Openings', 'Stairs', 'Fixtures', 'Furniture',
+  'Casework', 'Structural', 'Annotations', 'Fire/Safety',
+] as const
+
+export const ELEVATION_CATEGORIES = [
+  'Elevation', 'Annotations',
+] as const
+
+export const DETAIL_CATEGORIES = [
+  'Details', 'Annotations',
 ] as const

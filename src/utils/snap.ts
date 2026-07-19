@@ -2,7 +2,7 @@ import { PlacedElement } from '../types'
 
 interface Point { x: number; y: number }
 
-const WALL_BLOX_IDS = new Set(['wall-exterior', 'wall-interior', 'wall-cmu'])
+const WALL_BLOX_IDS = new Set(['wall-exterior', 'wall-interior', 'wall-cmu', 'wall-glazing'])
 
 export interface WallSnapResult {
   x: number

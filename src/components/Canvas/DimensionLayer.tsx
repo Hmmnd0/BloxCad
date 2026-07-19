@@ -2,25 +2,28 @@ import React from 'react'
 import { Layer, Group, Line, Text, Circle } from 'react-konva'
 import Konva from 'konva'
 import { DimensionLine } from '../../types'
-import { formatFeet } from '../../utils/scale'
+import { formatFeet, formatInches } from '../../utils/scale'
+import { DrawingMode } from '../../types'
 
 interface DimShapeProps {
   dim: DimensionLine
   pixelsPerFoot: number
   selected: boolean
   preview?: boolean
+  mode?: DrawingMode
   onClick?: (e: Konva.KonvaEventObject<MouseEvent>) => void
   onOffsetDrag?: (newOffset: number) => void
 }
 
-const DIM_COLOR = '#555'
+const DIM_COLOR = '#3A3A3A'
 const SEL_COLOR = '#4F9EFF'
 const EXT_OVERHANG = 6   // px past the dim line
 const EXT_GAP = 3        // px gap from the element edge before ext line starts
 const TICK_SIZE = 5      // px half-length of tick marks
-const FONT_SIZE = 11
+const FONT_SIZE = 10
+const DIM_FONT = "Arial, 'Helvetica Neue', sans-serif"
 
-function DimShape({ dim, pixelsPerFoot, selected, preview, onClick, onOffsetDrag }: DimShapeProps) {
+function DimShape({ dim, pixelsPerFoot, selected, preview, mode, onClick, onOffsetDrag }: DimShapeProps) {
   const { x1, y1, x2, y2, offset } = dim
   const color = selected ? SEL_COLOR : preview ? '#4F9EFF' : DIM_COLOR
   const opacity = preview ? 0.7 : 1
@@ -90,7 +93,7 @@ function DimShape({ dim, pixelsPerFoot, selected, preview, onClick, onOffsetDrag
     handleY = (minY + maxY) / 2
   }
 
-  const label = formatFeet(dist)
+  const label = mode === 'detail' ? formatInches(dist) : formatFeet(dist)
 
   return (
     <Group opacity={opacity} onClick={(e) => { e.cancelBubble = true; onClick?.(e) }}>
@@ -117,10 +120,11 @@ function DimShape({ dim, pixelsPerFoot, selected, preview, onClick, onOffsetDrag
         rotation={textRot}
         fontSize={FONT_SIZE}
         fill={color}
-        fontFamily="'SF Mono', 'Menlo', monospace"
+        fontFamily={DIM_FONT}
         align="center"
-        offsetX={isHoriz ? label.length * (FONT_SIZE * 0.32) : FONT_SIZE / 2}
-        offsetY={isHoriz ? 0 : label.length * (FONT_SIZE * 0.32)}
+        width={Math.max(36, label.length * 7)}
+        offsetX={isHoriz ? Math.max(18, label.length * 3.5) : FONT_SIZE / 2}
+        offsetY={isHoriz ? 0 : Math.max(18, label.length * 3.5)}
         listening={false}
       />
 
@@ -170,6 +174,7 @@ interface DimensionLayerProps {
   dimensions: DimensionLine[]
   selectedDimIds: string[]
   pixelsPerFoot: number
+  mode?: DrawingMode
   onSelect: (id: string, multi: boolean) => void
   onOffsetDrag: (id: string, newOffset: number) => void
   preview?: Omit<DimensionLine, 'id' | 'offset'>
@@ -177,7 +182,7 @@ interface DimensionLayerProps {
 }
 
 export function DimensionLayer({
-  dimensions, selectedDimIds, pixelsPerFoot,
+  dimensions, selectedDimIds, pixelsPerFoot, mode,
   onSelect, onOffsetDrag, preview, previewOffset = 1.5
 }: DimensionLayerProps) {
   return (
@@ -187,6 +192,7 @@ export function DimensionLayer({
           key={dim.id}
           dim={dim}
           pixelsPerFoot={pixelsPerFoot}
+          mode={mode}
           selected={selectedDimIds.includes(dim.id)}
           onClick={(e?: Konva.KonvaEventObject<MouseEvent>) => {
             e?.cancelBubble && (e.cancelBubble = true)
@@ -201,6 +207,7 @@ export function DimensionLayer({
         <DimShape
           dim={{ ...preview, id: '__preview__', offset: previewOffset }}
           pixelsPerFoot={pixelsPerFoot}
+          mode={mode}
           selected={false}
           preview
         />

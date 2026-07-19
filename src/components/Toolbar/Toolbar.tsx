@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useState, useRef, useEffect } from 'react'
 import { useStore } from '../../store/useStore'
 import { SCALES } from '../../types'
 import { exportAsPNG, exportAsPDF } from '../../utils/exportManager'
@@ -26,7 +26,7 @@ function Divider() {
   return <div className="w-px h-5 bg-gray-600 mx-1 shrink-0" />
 }
 
-export function Toolbar() {
+export function Toolbar({ onOpenClaudeSetup }: { onOpenClaudeSetup?: () => void }) {
   const {
     project, isDirty, selectedElementIds, selectedDimIds,
     deleteSelectedElements, deleteSelectedDims, rotateSelected,
@@ -34,13 +34,36 @@ export function Toolbar() {
     past, future, undo, redo,
     showDRCPanel, setShowDRCPanel,
     showTitleBlock, setShowTitleBlock,
-    autoDimSelected, alignSelected, distributeSelected
+    showLegend, setShowLegend,
+    autoDimSelected, autoCallout, alignSelected, distributeSelected,
+    mirrorSelected, snapModuleFt, setSnapModule,
+    setDrawingMode
   } = useStore()
+
+  const [saveMenuOpen, setSaveMenuOpen] = useState(false)
+  const saveMenuRef = useRef<HTMLDivElement>(null)
+  const [claudeConfigured, setClaudeConfigured] = useState<boolean | null>(null)
+
+  useEffect(() => {
+    window.api?.getClaudeStatus?.().then(s => setClaudeConfigured(s.configured)).catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    if (!saveMenuOpen) return
+    const handler = (e: MouseEvent) => {
+      if (saveMenuRef.current && !saveMenuRef.current.contains(e.target as Node)) {
+        setSaveMenuOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [saveMenuOpen])
 
   const handleNew = () => setShowNewProjectDialog(true)
 
   const handleSave = async () => {
     if (!project) return
+    setSaveMenuOpen(false)
     const data = JSON.stringify(project, null, 2)
     await window.api?.saveProject(data, project.name)
   }
@@ -59,11 +82,13 @@ export function Toolbar() {
 
   const handleExportPNG = async () => {
     if (!project) return
+    setSaveMenuOpen(false)
     await exportAsPNG(project.name)
   }
 
   const handleExportPDF = async () => {
     if (!project) return
+    setSaveMenuOpen(false)
     await exportAsPDF(project.name)
   }
 
@@ -72,14 +97,48 @@ export function Toolbar() {
 
   return (
     <div className="drag-region flex items-center gap-1 h-10 pl-[78px] pr-3 bg-toolbar border-b border-gray-700 shrink-0">
-      {/* File ops */}
-      <ToolBtn label="New" title="New project" onClick={handleNew} />
-      <ToolBtn label="Open" title="Open project" onClick={handleOpen} />
-      <ToolBtn
-        label={isDirty ? 'Save •' : 'Save'}
-        title="Save project"
-        onClick={handleSave}
-      />
+      {/* File dropdown — New / Open / Save / Export */}
+      <div ref={saveMenuRef} className="relative no-drag">
+        <button
+          onClick={() => setSaveMenuOpen(o => !o)}
+          className={`px-3 py-1 rounded text-xs font-medium transition-colors whitespace-nowrap ${
+            saveMenuOpen ? 'bg-accent text-white' : isDirty ? 'text-yellow-300 hover:bg-gray-600 hover:text-white' : 'text-gray-300 hover:bg-gray-600 hover:text-white'
+          }`}
+          title="File menu"
+        >
+          {isDirty ? 'File • ▾' : 'File ▾'}
+        </button>
+        {saveMenuOpen && (
+          <div className="absolute top-full left-0 mt-1 z-50 bg-gray-800 border border-gray-600 rounded shadow-lg min-w-[140px] py-1">
+            <button onClick={handleNew}
+              className="w-full text-left px-3 py-1.5 text-xs text-gray-200 hover:bg-gray-700 flex items-center gap-2">
+              <span>✦</span> New Project
+            </button>
+            <button onClick={handleOpen}
+              className="w-full text-left px-3 py-1.5 text-xs text-gray-200 hover:bg-gray-700 flex items-center gap-2">
+              <span>📂</span> Open Project
+            </button>
+            <div className="my-1 border-t border-gray-700" />
+            <button onClick={handleSave}
+              className="w-full text-left px-3 py-1.5 text-xs text-gray-200 hover:bg-gray-700 flex items-center gap-2">
+              <span>💾</span> Save Project
+            </button>
+            {project && (
+              <>
+                <div className="my-1 border-t border-gray-700" />
+                <button onClick={handleExportPNG}
+                  className="w-full text-left px-3 py-1.5 text-xs text-gray-200 hover:bg-gray-700 flex items-center gap-2">
+                  <span>⬇</span> Export PNG
+                </button>
+                <button onClick={handleExportPDF}
+                  className="w-full text-left px-3 py-1.5 text-xs text-gray-200 hover:bg-gray-700 flex items-center gap-2">
+                  <span>⬇</span> Export PDF
+                </button>
+              </>
+            )}
+          </div>
+        )}
+      </div>
 
       <Divider />
 
@@ -93,12 +152,20 @@ export function Toolbar() {
       {hasSelection && (
         <>
           {canRotate && (
-            <ToolBtn label="↻ Rotate" title="Rotate 90° (R)" onClick={() => rotateSelected(90)} />
+            <>
+              <ToolBtn label="↻ 90°" title="Rotate 90° (R)" onClick={() => rotateSelected(90)} />
+              <ToolBtn label="↻ 45°" title="Rotate 45° (⇧R)" onClick={() => rotateSelected(45)} />
+              <ToolBtn label="⇄ Mirror" title="Mirror horizontally (duplicate + flip)" onClick={() => mirrorSelected('h')} />
+              <ToolBtn label="⇅ Mirror" title="Mirror vertically (duplicate + flip)" onClick={() => mirrorSelected('v')} />
+            </>
           )}
           {selectedElementIds.length === 1 && (
             <>
-              <ToolBtn label="⊢ Dim Out" title="Add dimension lines outside element" onClick={() => autoDimSelected('outside')} />
-              <ToolBtn label="⊣ Dim In" title="Add dimension lines inside element" onClick={() => autoDimSelected('inside')} />
+              <ToolBtn label="↑ Dim" title="Add dimension above" onClick={() => autoDimSelected('up')} />
+              <ToolBtn label="↓ Dim" title="Add dimension below" onClick={() => autoDimSelected('down')} />
+              <ToolBtn label="← Dim" title="Add dimension to the left" onClick={() => autoDimSelected('left')} />
+              <ToolBtn label="→ Dim" title="Add dimension to the right" onClick={() => autoDimSelected('right')} />
+<ToolBtn label="⊙ Callout" title="Auto-generate material callout labels for all selected elements" onClick={autoCallout} />
             </>
           )}
           {selectedElementIds.length >= 2 && (
@@ -127,15 +194,44 @@ export function Toolbar() {
         </>
       )}
 
+      {/* Snap module */}
+      {project && (
+        <label className="no-drag flex items-center gap-1 text-xs text-gray-400">
+          <span>Snap</span>
+          <select
+            value={snapModuleFt ?? ''}
+            onChange={e => setSnapModule(e.target.value ? parseFloat(e.target.value) : null)}
+            className="bg-gray-700 text-gray-200 text-xs px-1 py-0.5 rounded border border-gray-600"
+          >
+            <option value="">Auto</option>
+            {(project.mode ?? 'floorplan') === 'detail' ? (
+              <>
+                <option value="0.125">⅛"</option>
+                <option value="0.25">¼"</option>
+                <option value="0.5">½"</option>
+                <option value="1">1"</option>
+                <option value="2">2"</option>
+              </>
+            ) : (
+              <>
+                <option value="0.25">3"</option>
+                <option value="0.5">6"</option>
+                <option value="1">1'</option>
+                <option value="2">2'</option>
+                <option value="4">4' (Wright)</option>
+              </>
+            )}
+          </select>
+        </label>
+      )}
+
       {/* View */}
       <ToolBtn label="⌖ Fit" title="Reset view to origin" onClick={resetView} />
 
-      {/* Export */}
+      {/* View toggles */}
       {project && (
         <>
           <Divider />
-          <ToolBtn label="⬇ PNG" title="Export as PNG image" onClick={handleExportPNG} />
-          <ToolBtn label="⬇ PDF" title="Export as PDF" onClick={handleExportPDF} />
           <ToolBtn
             label="Title Block"
             title="Toggle title block"
@@ -147,6 +243,12 @@ export function Toolbar() {
             title="Design rule check"
             active={showDRCPanel}
             onClick={() => setShowDRCPanel(!showDRCPanel)}
+          />
+          <ToolBtn
+            label="Legend"
+            title="Toggle drawing legend"
+            active={showLegend}
+            onClick={() => setShowLegend(!showLegend)}
           />
         </>
       )}
@@ -160,9 +262,49 @@ export function Toolbar() {
           <span className="text-gray-400 text-xs truncate max-w-[160px]">{project.name}</span>
           <span className="bg-gray-700 text-gray-300 text-xs px-2 py-0.5 rounded font-mono shrink-0">
             {SCALES[project.scale].label}
+            {(project.mode ?? 'floorplan') === 'detail' && <span className="ml-1 text-yellow-400">in</span>}
           </span>
+          {(() => {
+            const mode = project.mode ?? 'floorplan'
+            const next = mode === 'floorplan' ? 'elevation' : mode === 'elevation' ? 'detail' : 'floorplan'
+            const icons = { floorplan: '⊞', elevation: '▭', detail: '⊟' }
+            const labels = { floorplan: 'Floor Plan', elevation: 'Elevation', detail: 'Detail' }
+            return (
+              <button
+                onClick={() => setDrawingMode(next)}
+                title="Switch drawing mode"
+                className="flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-semibold transition-colors bg-gray-700 hover:bg-gray-600 shrink-0"
+              >
+                <span>{icons[mode]}</span>
+                <span className="text-gray-200">{labels[mode]}</span>
+              </button>
+            )
+          })()}
         </div>
       )}
+
+      {/* Claude connection — always visible, far right */}
+      <div className="ml-auto flex items-center shrink-0 no-drag">
+        {claudeConfigured === false ? (
+          <button
+            onClick={onOpenClaudeSetup}
+            className="flex items-center gap-2 px-3 py-1 rounded-lg bg-orange-500 hover:bg-orange-400 transition-colors text-white text-xs font-medium"
+            title="Connect bloxCAD to Claude Desktop"
+          >
+            <span className="w-2 h-2 rounded-full bg-white/60" />
+            Connect to Claude
+          </button>
+        ) : (
+          <button
+            onClick={onOpenClaudeSetup}
+            className="flex items-center gap-1.5 px-2 py-1 rounded text-xs text-gray-400 hover:text-gray-200 hover:bg-gray-700 transition-colors"
+            title={claudeConfigured ? 'Claude Desktop connected' : 'Checking…'}
+          >
+            <span className={`w-2 h-2 rounded-full ${claudeConfigured ? 'bg-green-500' : 'bg-gray-600'}`} />
+            <span>Claude</span>
+          </button>
+        )}
+      </div>
     </div>
   )
 }

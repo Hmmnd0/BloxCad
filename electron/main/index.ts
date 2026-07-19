@@ -1,9 +1,154 @@
-import { app, BrowserWindow, shell, ipcMain, dialog } from 'electron'
+import { app, BrowserWindow, shell, ipcMain, dialog, globalShortcut, Menu } from 'electron'
 import { join } from 'path'
+import { homedir } from 'os'
+import { execSync } from 'child_process'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
-import { readFileSync, writeFileSync } from 'fs'
+import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs'
 import { createServer } from 'http'
 import { randomUUID } from 'crypto'
+
+// ── Claude Desktop integration ────────────────────────────────────────────────
+
+function getClaudeConfigPath(): string {
+  if (process.platform === 'win32') {
+    return join(process.env.APPDATA ?? homedir(), 'Claude', 'claude_desktop_config.json')
+  }
+  return join(homedir(), 'Library', 'Application Support', 'Claude', 'claude_desktop_config.json')
+}
+
+function findNodePath(): string | null {
+  // Try shell which/where first
+  try {
+    const cmd = process.platform === 'win32' ? 'where node' : 'which node'
+    const found = execSync(cmd, { encoding: 'utf-8', stdio: ['ignore', 'pipe', 'ignore'] }).trim().split('\n')[0].trim()
+    if (found) return found
+  } catch { /* fall through */ }
+
+  // Check common install locations on macOS/Linux
+  const candidates = [
+    '/opt/homebrew/bin/node',   // M-series Homebrew
+    '/usr/local/bin/node',      // Intel Homebrew / nvm default
+    '/usr/bin/node',
+    join(homedir(), '.volta', 'bin', 'node'),
+    join(homedir(), '.nvm', 'versions', 'node'),  // nvm — partial, will refine below
+  ]
+  for (const p of candidates) {
+    if (existsSync(p)) return p
+  }
+  return null
+}
+
+function getMcpServerPath(): string {
+  if (is.dev) {
+    return join(__dirname, '../../mcp-server/index.mjs')
+  }
+  return join(process.resourcesPath, 'mcp-server', 'index.mjs')
+}
+
+async function configureClaudeDesktop(): Promise<{ success: boolean; configPath: string; error?: string }> {
+  const configPath = getClaudeConfigPath()
+  const nodePath = findNodePath()
+  if (!nodePath) {
+    return {
+      success: false,
+      configPath,
+      error: 'Node.js was not found on this machine.\n\nInstall Node.js from nodejs.org (LTS version), then try again.'
+    }
+  }
+
+  const mcpPath = getMcpServerPath()
+  if (!existsSync(mcpPath)) {
+    return { success: false, configPath, error: `MCP server not found at:\n${mcpPath}` }
+  }
+
+  let config: Record<string, unknown> = {}
+  if (existsSync(configPath)) {
+    try { config = JSON.parse(readFileSync(configPath, 'utf-8')) } catch { config = {} }
+  }
+
+  if (!config.mcpServers || typeof config.mcpServers !== 'object') {
+    config.mcpServers = {}
+  }
+  ;(config.mcpServers as Record<string, unknown>).bloxcad = {
+    command: nodePath,
+    args: [mcpPath]
+  }
+
+  const configDir = join(configPath, '..')
+  if (!existsSync(configDir)) mkdirSync(configDir, { recursive: true })
+  writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf-8')
+
+  return { success: true, configPath }
+}
+
+function getClaudeStatus(): { configured: boolean; configPath: string; mcpServerPath: string } {
+  const configPath = getClaudeConfigPath()
+  const mcpServerPath = getMcpServerPath()
+  let configured = false
+  if (existsSync(configPath)) {
+    try {
+      const cfg = JSON.parse(readFileSync(configPath, 'utf-8'))
+      configured = !!(cfg?.mcpServers?.bloxcad)
+    } catch { /* */ }
+  }
+  return { configured, configPath, mcpServerPath }
+}
+
+function buildAppMenu(win: BrowserWindow): void {
+  const template: Electron.MenuItemConstructorOptions[] = [
+    ...(process.platform === 'darwin' ? [{ role: 'appMenu' as const }] : []),
+    { role: 'fileMenu' as const },
+    { role: 'editMenu' as const },
+    { role: 'viewMenu' as const },
+    {
+      label: 'Help',
+      submenu: [
+        {
+          label: 'Connect to Claude Desktop',
+          accelerator: process.platform === 'darwin' ? 'Cmd+Shift+K' : 'Ctrl+Shift+K',
+          click: async () => {
+            const result = await configureClaudeDesktop()
+            if (result.success) {
+              dialog.showMessageBox(win, {
+                type: 'info',
+                title: 'Connected',
+                message: 'bloxCAD has been added to Claude Desktop.',
+                detail: `Config saved to:\n${result.configPath}\n\nRestart Claude Desktop to activate.`,
+                buttons: ['OK']
+              })
+            } else {
+              dialog.showMessageBox(win, {
+                type: 'error',
+                title: 'Setup Failed',
+                message: 'Could not configure Claude Desktop.',
+                detail: result.error,
+                buttons: ['OK']
+              })
+            }
+          }
+        },
+        {
+          label: 'Claude Connection Status',
+          click: () => {
+            const s = getClaudeStatus()
+            dialog.showMessageBox(win, {
+              type: 'info',
+              title: 'Claude Connection Status',
+              message: s.configured ? 'Claude Desktop is configured.' : 'Claude Desktop is not yet configured.',
+              detail: s.configured
+                ? `MCP server registered at:\n${s.mcpServerPath}\n\nConfig file:\n${s.configPath}`
+                : `No bloxcad entry found in:\n${s.configPath}\n\nUse Help → Connect to Claude Desktop to set it up.`,
+              buttons: ['OK']
+            })
+          }
+        },
+        { type: 'separator' as const },
+        ...(process.platform !== 'darwin' ? [{ role: 'about' as const }] : [])
+      ]
+    }
+  ]
+  Menu.setApplicationMenu(Menu.buildFromTemplate(template))
+}
 
 // ── MCP bridge ────────────────────────────────────────────────────────────────
 const MCP_PORT = 57489
@@ -119,6 +264,11 @@ function createWindow(): BrowserWindow {
 
   mainWindow.on('ready-to-show', () => {
     mainWindow.show()
+    if (is.dev) {
+      globalShortcut.register('CommandOrControl+Alt+I', () => {
+        mainWindow.webContents.toggleDevTools()
+      })
+    }
   })
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
@@ -193,8 +343,12 @@ app.whenReady().then(() => {
     return { success: false }
   })
 
+  ipcMain.handle('configure-claude', () => configureClaudeDesktop())
+  ipcMain.handle('get-claude-status', () => getClaudeStatus())
+
   const win = createWindow()
   startMcpBridge(win)
+  buildAppMenu(win)
 
   app.on('activate', function () {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()

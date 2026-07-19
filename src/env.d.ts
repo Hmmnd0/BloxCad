@@ -8,5 +8,7 @@ interface Window {
     exportPDF: (dataUrl: string, imgWidth: number, imgHeight: number, defaultName: string) => Promise<{ success: boolean }>
     onMcpAction: (cb: (msg: { requestId: string; action: string; payload: unknown }) => void) => void
     mcpRespond: (requestId: string, result: unknown) => void
+    configureClaude: () => Promise<{ success: boolean; configPath: string; error?: string }>
+    getClaudeStatus: () => Promise<{ configured: boolean; configPath: string; mcpServerPath: string }>
   }
 }

@@ -1,11 +1,14 @@
-import React, { useRef, useEffect, useState } from 'react'
+import React, { useRef, useEffect, useState, useMemo, useCallback, memo } from 'react'
 import { Layer, Group, Transformer, Rect, Line } from 'react-konva'
 import Konva from 'konva'
 import { PlacedElement, Tool } from '../../types'
 import { RENDERERS } from './renderers'
-import { useStore } from '../../store/useStore'
+import { useStore, getActiveElements } from '../../store/useStore'
 import { snapToGrid } from '../../utils/scale'
 import { snapElementEdges, edgeSnapThresholdFt } from '../../utils/snap'
+
+const WALL_IDS_FOR_CLIP = new Set(['wall-exterior', 'wall-interior', 'wall-cmu', 'wall-glazing', 'wall-fire-1hr', 'wall-fire-2hr'])
+const OPENING_IDS_FOR_CLIP = new Set(['cased-opening', 'door-single', 'door-double', 'door-sliding', 'window-single', 'window-double', 'window-multi'])
 
 interface ElementsLayerProps {
   pixelsPerFoot: number
@@ -25,19 +28,22 @@ interface BloxGroupProps {
   pixelsPerFoot: number
   snapFeet: number
   isSelected: boolean
-  allSelectedIds: string[]
+  // Passed as a ref so selection changes don't force re-renders of every element
+  allSelectedIdsRef: React.MutableRefObject<string[]>
+  activeGroupId: string | null
   toolActive: Tool
   layerRef: React.RefObject<Konva.Layer>
   groupDrag: React.MutableRefObject<GroupDragState | null>
   onSelect: (id: string, multi: boolean) => void
   onMoveMany: (moves: { id: string; x: number; y: number }[]) => void
   onSnapGuide: (guides: SnapGuides) => void
+  wallOpenings?: PlacedElement[]
 }
 
-function BloxGroup({
+const BloxGroup = memo(function BloxGroup({
   element, pixelsPerFoot, snapFeet, isSelected,
-  allSelectedIds, toolActive, layerRef, groupDrag,
-  onSelect, onMoveMany, onSnapGuide
+  allSelectedIdsRef, activeGroupId, toolActive, layerRef, groupDrag,
+  onSelect, onMoveMany, onSnapGuide, wallOpenings
 }: BloxGroupProps) {
   const altDragOrigin = useRef<{ x: number; y: number } | null>(null)
 
@@ -60,12 +66,42 @@ function BloxGroup({
       x={cx} y={cy}
       offsetX={w / 2} offsetY={h / 2}
       rotation={element.rotation}
+      opacity={activeGroupId !== null && element.groupId !== activeGroupId ? 0.35 : 1}
       draggable={!element.locked && toolActive !== 'hand'}
+      onDblClick={(e) => {
+        if (!element.groupId) return
+        e.cancelBubble = true
+        useStore.getState().isolateElement(element.id)
+      }}
       onClick={(e) => {
-        // If placing a blox, let the click bubble to the Stage placement handler
         if (useStore.getState().activeBloxId) return
         e.cancelBubble = true
-        onSelect(element.id, e.evt.shiftKey || e.evt.metaKey)
+
+        const multi = e.evt.shiftKey || e.evt.metaKey
+        if (!multi) {
+          const stage = e.target.getStage()
+          const pos = stage?.getPointerPosition()
+          if (pos && stage) {
+            const scale = stage.scaleX()
+            const clickXft = (pos.x - stage.x()) / scale / pixelsPerFoot
+            const clickYft = (pos.y - stage.y()) / scale / pixelsPerFoot
+            const { selectedElementIds: selIds } = useStore.getState()
+            const allEls = getActiveElements(useStore.getState())
+            const hits = allEls.filter(el =>
+              clickXft >= el.x && clickXft <= el.x + el.width &&
+              clickYft >= el.y && clickYft <= el.y + el.height
+            )
+            if (hits.length > 1 && selIds.length === 1) {
+              const currentIdx = hits.findIndex(el => el.id === selIds[0])
+              if (currentIdx !== -1) {
+                onSelect(hits[(currentIdx + 1) % hits.length].id, false)
+                return
+              }
+            }
+          }
+        }
+
+        onSelect(element.id, multi)
       }}
       onTap={(e) => {
         if (useStore.getState().activeBloxId) return
@@ -75,7 +111,7 @@ function BloxGroup({
       onDragStart={(e) => {
         // Track original position for Option/Alt+drag duplicate
         if (e.evt.altKey) {
-          const el = useStore.getState().project?.elements.find(el => el.id === element.id)
+          const el = getActiveElements(useStore.getState()).find(el => el.id === element.id)
           if (el) altDragOrigin.current = { x: el.x, y: el.y }
         } else {
           altDragOrigin.current = null
@@ -83,7 +119,7 @@ function BloxGroup({
         // Become the group leader — record start positions for all selected elements
         if (!isSelected) return
         const map = new Map<string, { x: number; y: number }>()
-        allSelectedIds.forEach(selId => {
+        allSelectedIdsRef.current.forEach(selId => {
           const node = layerRef.current?.findOne(`#${selId}`) as Konva.Group | undefined
           if (node) map.set(selId, { x: node.x(), y: node.y() })
         })
@@ -93,7 +129,7 @@ function BloxGroup({
         const node = e.target as Konva.Group
         const stageScale = node.getStage()?.scaleX() ?? 1
 
-        const el = useStore.getState().project?.elements.find(e => e.id === element.id)
+        const el = getActiveElements(useStore.getState()).find(e => e.id === element.id)
         const halfW = el ? (el.width  * pixelsPerFoot) / 2 : w / 2
         const halfH = el ? (el.height * pixelsPerFoot) / 2 : h / 2
         const elW = el?.width  ?? element.width
@@ -104,7 +140,7 @@ function BloxGroup({
         const tlYft = (node.y() - halfH) / pixelsPerFoot
 
         // Edge-snap against all other elements
-        const allElements = useStore.getState().project?.elements ?? []
+        const allElements = getActiveElements(useStore.getState())
         const threshold = edgeSnapThresholdFt(pixelsPerFoot, stageScale, 20)
         const snap = snapElementEdges(
           { x: tlXft, y: tlYft, width: elW, height: elH },
@@ -137,7 +173,7 @@ function BloxGroup({
         const dx = (finalTlX + halfW) - leaderStart.x
         const dy = (finalTlY + halfH) - leaderStart.y
 
-        allSelectedIds.forEach(selId => {
+        allSelectedIdsRef.current.forEach(selId => {
           if (selId === element.id) return
           const sibling = layerRef.current?.findOne(`#${selId}`) as Konva.Group | undefined
           const sibStart = state.initialPositions.get(selId)
@@ -150,11 +186,11 @@ function BloxGroup({
       onDragEnd={() => {
         const state = groupDrag.current
         const moves: { id: string; x: number; y: number }[] = []
-        const allElements = useStore.getState().project?.elements ?? []
+        const allElements = getActiveElements(useStore.getState())
 
-        if (state && state.leaderId === element.id && allSelectedIds.length > 1) {
+        if (state && state.leaderId === element.id && allSelectedIdsRef.current.length > 1) {
           // Commit all group members — node.x()/y() is center, convert to top-left
-          allSelectedIds.forEach(selId => {
+          allSelectedIdsRef.current.forEach(selId => {
             const node = layerRef.current?.findOne(`#${selId}`) as Konva.Group | undefined
             const elData = allElements.find(e => e.id === selId)
             if (node && elData) {
@@ -189,11 +225,15 @@ function BloxGroup({
         }
       }}
     >
+      {/* Transparent hit rect — ensures every element is clickable/draggable
+          even when renderer shapes use listening={false} for Canvas 2D drawing */}
+      <Rect x={0} y={0} width={w} height={h} fill="rgba(0,0,0,0)" />
       {isSelected && (
         <Rect
-          x={-2} y={-2}
-          width={w + 4} height={h + 4}
-          stroke="#4F9EFF" strokeWidth={2}
+          x={-1} y={-1}
+          width={w + 2} height={h + 2}
+          stroke="#4F9EFF" strokeWidth={1}
+          strokeScaleEnabled={false}
           fill="rgba(79,158,255,0.06)"
           listening={false}
         />
@@ -203,6 +243,19 @@ function BloxGroup({
         scaleX={(element.properties.flipH ? -1 : 1)}
         y={(element.properties.flipV ? h : 0)}
         scaleY={(element.properties.flipV ? -1 : 1)}
+        clipFunc={wallOpenings && wallOpenings.length > 0 ? (ctx: any): any => {
+          const ppf = pixelsPerFoot
+          ctx.rect(0, 0, w, h)
+          for (const op of wallOpenings) {
+            ctx.rect(
+              (op.x - element.x) * ppf,
+              (op.y - element.y) * ppf,
+              op.width * ppf,
+              op.height * ppf
+            )
+          }
+          return ['evenodd']
+        } : undefined}
       >
         <Renderer
           widthPx={w}
@@ -213,20 +266,98 @@ function BloxGroup({
       </Group>
     </Group>
   )
+// Custom comparator — only re-render when visually relevant props change.
+// allSelectedIdsRef is a stable ref so it never triggers re-renders; its .current
+// is always up to date for drag handlers.
+}, (prev, next) => {
+  if (prev.isSelected !== next.isSelected) return false
+  if (prev.activeGroupId !== next.activeGroupId) return false
+  if (prev.toolActive !== next.toolActive) return false
+  if (prev.wallOpenings !== next.wallOpenings) return false
+  if (prev.pixelsPerFoot !== next.pixelsPerFoot) return false
+  const e1 = prev.element, e2 = next.element
+  return (
+    e1 === e2 || (
+      e1.x === e2.x && e1.y === e2.y &&
+      e1.width === e2.width && e1.height === e2.height &&
+      e1.rotation === e2.rotation && e1.locked === e2.locked &&
+      e1.groupId === e2.groupId && e1.properties === e2.properties
+    )
+  )
+})
+
+function GroupOutline({ selectedIds, elements, activeGroupId, pixelsPerFoot }: {
+  selectedIds: string[]
+  elements: PlacedElement[]
+  activeGroupId: string | null
+  pixelsPerFoot: number
+}) {
+  if (activeGroupId !== null || selectedIds.length < 2) return null
+  const selectedEls = elements.filter(el => selectedIds.includes(el.id))
+  if (selectedEls.length < 2) return null
+  const groupId = selectedEls[0]?.groupId
+  if (!groupId || !selectedEls.every(el => el.groupId === groupId)) return null
+
+  const minX = Math.min(...selectedEls.map(el => el.x))
+  const minY = Math.min(...selectedEls.map(el => el.y))
+  const maxX = Math.max(...selectedEls.map(el => el.x + el.width))
+  const maxY = Math.max(...selectedEls.map(el => el.y + el.height))
+  const padPx = 8
+
+  return (
+    <Rect
+      x={minX * pixelsPerFoot - padPx}
+      y={minY * pixelsPerFoot - padPx}
+      width={(maxX - minX) * pixelsPerFoot + padPx * 2}
+      height={(maxY - minY) * pixelsPerFoot + padPx * 2}
+      stroke="#2DD4BF"
+      strokeWidth={1}
+      strokeScaleEnabled={false}
+      fill="transparent"
+      dash={[6, 3]}
+      listening={false}
+    />
+  )
 }
 
 export function ElementsLayer({ pixelsPerFoot, snapFeet, toolActive }: ElementsLayerProps) {
-  const { project, selectedElementIds, selectElement, updateElement } = useStore()
+  const { project, selectedElementIds, selectElement, updateElement, activeGroupId } = useStore()
   const transformerRef = useRef<Konva.Transformer>(null)
   const layerRef = useRef<Konva.Layer>(null)
   const groupDrag = useRef<GroupDragState | null>(null)
   const [snapGuides, setSnapGuides] = useState<SnapGuides>({})
 
-  const layers = project?.layers ?? []
-  const hiddenLayerIds = new Set(layers.filter(l => !l.visible).map(l => l.id))
-  const lockedLayerIds = new Set(layers.filter(l => l.locked).map(l => l.id))
+  // Keep a stable ref to the current selection — lets BloxGroup drag handlers always
+  // see the latest selection without needing to re-render all elements on change.
+  const allSelectedIdsRef = useRef(selectedElementIds)
+  allSelectedIdsRef.current = selectedElementIds
 
-  const elements = (project?.elements ?? []).filter(el => !hiddenLayerIds.has(el.layerId ?? ''))
+  const layers = project?.layers ?? []
+  const hiddenLayerIds = useMemo(
+    () => new Set(layers.filter(l => !l.visible).map(l => l.id)),
+    [layers]
+  )
+  const lockedLayerIds = useMemo(
+    () => new Set(layers.filter(l => l.locked).map(l => l.id)),
+    [layers]
+  )
+
+  const allEls = project?.mode === 'detail' ? (project?.detailElements ?? []) : (project?.elements ?? [])
+  const elements = allEls.filter(el => !hiddenLayerIds.has(el.layerId ?? ''))
+
+  const wallOpeningsMap = useMemo(() => {
+    const map = new Map<string, PlacedElement[]>()
+    const walls = elements.filter(el => WALL_IDS_FOR_CLIP.has(el.bloxId) && !el.rotation)
+    const openings = elements.filter(el => OPENING_IDS_FOR_CLIP.has(el.bloxId))
+    for (const wall of walls) {
+      const hits = openings.filter(op =>
+        op.x < wall.x + wall.width && op.x + op.width > wall.x &&
+        op.y < wall.y + wall.height && op.y + op.height > wall.y
+      )
+      if (hits.length > 0) map.set(wall.id, hits)
+    }
+    return map
+  }, [elements])
 
   // Keep transformer in sync with selection
   useEffect(() => {
@@ -239,28 +370,40 @@ export function ElementsLayer({ pixelsPerFoot, snapFeet, toolActive }: ElementsL
     transformer.getLayer()?.batchDraw()
   }, [selectedElementIds])
 
-  const handleMoveMany = (moves: { id: string; x: number; y: number }[]) => {
+  const handleMoveMany = useCallback((moves: { id: string; x: number; y: number }[]) => {
     moves.forEach(({ id, x, y }) => updateElement(id, { x, y }))
-  }
+  }, [updateElement])
 
   return (
     <Layer ref={layerRef}>
-      {elements.map(el => (
-        <BloxGroup
-          key={el.id}
-          element={{ ...el, locked: el.locked || lockedLayerIds.has(el.layerId ?? '') }}
-          pixelsPerFoot={pixelsPerFoot}
-          snapFeet={snapFeet}
-          isSelected={selectedElementIds.includes(el.id)}
-          allSelectedIds={selectedElementIds}
-          toolActive={toolActive}
-          layerRef={layerRef}
-          groupDrag={groupDrag}
-          onSelect={(id, multi) => selectElement(id, multi)}
-          onMoveMany={handleMoveMany}
-          onSnapGuide={setSnapGuides}
-        />
-      ))}
+      {elements.map(el => {
+        const locked = el.locked || lockedLayerIds.has(el.layerId ?? '')
+        const elWithLocked = locked !== el.locked ? { ...el, locked } : el
+        return (
+          <BloxGroup
+            key={el.id}
+            element={elWithLocked}
+            pixelsPerFoot={pixelsPerFoot}
+            snapFeet={snapFeet}
+            isSelected={selectedElementIds.includes(el.id)}
+            allSelectedIdsRef={allSelectedIdsRef}
+            activeGroupId={activeGroupId}
+            toolActive={toolActive}
+            layerRef={layerRef}
+            groupDrag={groupDrag}
+            onSelect={(id, multi) => selectElement(id, multi)}
+            onMoveMany={handleMoveMany}
+            onSnapGuide={setSnapGuides}
+            wallOpenings={wallOpeningsMap.get(el.id)}
+          />
+        )
+      })}
+      <GroupOutline
+        selectedIds={selectedElementIds}
+        elements={elements}
+        activeGroupId={activeGroupId}
+        pixelsPerFoot={pixelsPerFoot}
+      />
       <Transformer
         ref={transformerRef}
         borderStroke="#4F9EFF"
@@ -387,7 +530,17 @@ export function ElementsLayer({ pixelsPerFoot, snapFeet, toolActive }: ElementsL
               ? { ...el.properties, paneCount: Math.max(1, Math.min(12, Math.round((is90 || is270 ? scaledH : scaledW) / 2))) }
               : el.properties
 
-            if (is90 || is270) {
+            // Walls and linear detail elements normalize 90°/270° rotations by swapping
+            // W↔H and resetting rotation=0, so a horizontal wall becomes a vertical wall
+            // stored at rotation=0. Annotation symbols are directional — their renderers
+            // are designed for specific W/H proportions, so swapping would distort them.
+            const isLinearElement = el.bloxId.startsWith('wall-') ||
+              (el.bloxId.startsWith('detail-') &&
+                el.bloxId !== 'detail-rafter' &&
+                el.bloxId !== 'detail-pitched-layer') ||
+              el.bloxId === 'insulation-batt'
+
+            if ((is90 || is270) && isLinearElement) {
               // Normalize: swap W↔H, reset rotation=0
               const newW = scaledH
               const newH = scaledW

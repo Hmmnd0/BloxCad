@@ -1,7 +1,14 @@
 import React, { useRef, useState, useEffect, useCallback } from 'react'
-import { MousePointer2, Hand, PenLine, Ruler, Square, ChevronRight } from 'lucide-react'
+import { MousePointer2, Hand, PenLine, Ruler, Square, ChevronRight, Pentagon, Slash } from 'lucide-react'
 import { Tool, WallType } from '../../types'
 import { useStore } from '../../store/useStore'
+
+const ArcIcon = () => (
+  <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M2 14 C5 3 13 3 16 14" />
+    <path d="M4.5 14 C6.5 6 11.5 6 13.5 14" />
+  </svg>
+)
 
 interface ToolDef {
   id: Tool
@@ -20,6 +27,7 @@ const TOOLS: ToolDef[] = [
   { id: 'select',    label: 'Select',    shortcut: 'V', icon: <MousePointer2 size={18} strokeWidth={1.5} /> },
   { id: 'hand',      label: 'Pan',       shortcut: 'H', icon: <Hand          size={18} strokeWidth={1.5} /> },
   { id: 'wall',      label: 'Wall',      shortcut: 'W', icon: <PenLine       size={18} strokeWidth={1.5} /> },
+  { id: 'polygon',   label: 'Polygon',   shortcut: 'P', icon: <Pentagon      size={18} strokeWidth={1.5} /> },
   { id: 'dimension', label: 'Dimension', shortcut: 'D', icon: <Ruler         size={18} strokeWidth={1.5} /> },
   { id: 'rect',      label: 'Rectangle', shortcut: 'S', icon: <Square        size={18} strokeWidth={1.5} /> },
 ]
@@ -28,11 +36,15 @@ const LONG_PRESS_MS = 500
 
 interface WallFlyoutProps {
   activeWallType: WallType
-  onSelect: (type: WallType) => void
+  isDiagonalMode: boolean
+  isArcMode: boolean
+  onSelectType: (type: WallType) => void
+  onSelectDiagonal: () => void
+  onSelectArc: () => void
   onClose: () => void
 }
 
-function WallFlyout({ activeWallType, onSelect, onClose }: WallFlyoutProps) {
+function WallFlyout({ activeWallType, isDiagonalMode, isArcMode, onSelectType, onSelectDiagonal, onSelectArc, onClose }: WallFlyoutProps) {
   const ref = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -51,10 +63,10 @@ function WallFlyout({ activeWallType, onSelect, onClose }: WallFlyoutProps) {
       {WALL_OPTIONS.map(opt => (
         <button
           key={opt.type}
-          onClick={() => { onSelect(opt.type); onClose() }}
+          onClick={() => { onSelectType(opt.type); onClose() }}
           className={`
             w-full flex items-center gap-2 px-3 py-2 text-left text-sm transition-colors
-            ${activeWallType === opt.type
+            ${!isDiagonalMode && activeWallType === opt.type
               ? 'bg-accent text-white'
               : 'text-gray-300 hover:bg-sidebar-hover hover:text-white'
             }
@@ -67,6 +79,33 @@ function WallFlyout({ activeWallType, onSelect, onClose }: WallFlyoutProps) {
           </div>
         </button>
       ))}
+      <div className="my-1 border-t border-gray-700" />
+      <button
+        onClick={() => { onSelectDiagonal(); onClose() }}
+        className={`
+          w-full flex items-center gap-2 px-3 py-2 text-left text-sm transition-colors
+          ${isDiagonalMode ? 'bg-accent text-white' : 'text-gray-300 hover:bg-sidebar-hover hover:text-white'}
+        `}
+      >
+        <Slash size={14} strokeWidth={1.5} className="shrink-0" />
+        <div>
+          <div className="font-medium leading-tight">Free Angle</div>
+          <div className="text-[10px] opacity-60 leading-tight">Any angle (A)</div>
+        </div>
+      </button>
+      <button
+        onClick={() => { onSelectArc(); onClose() }}
+        className={`
+          w-full flex items-center gap-2 px-3 py-2 text-left text-sm transition-colors
+          ${isArcMode ? 'bg-accent text-white' : 'text-gray-300 hover:bg-sidebar-hover hover:text-white'}
+        `}
+      >
+        <ArcIcon />
+        <div>
+          <div className="font-medium leading-tight">Arc Wall</div>
+          <div className="text-[10px] opacity-60 leading-tight">3-click curved wall (C)</div>
+        </div>
+      </button>
     </div>
   )
 }
@@ -75,11 +114,15 @@ interface ToolButtonProps {
   tool: ToolDef
   active: boolean
   activeWallType: WallType
+  isDiagonalMode: boolean
+  isArcMode: boolean
   onClick: () => void
-  onWallSelect: (type: WallType) => void
+  onWallSelectType: (type: WallType) => void
+  onWallSelectDiagonal: () => void
+  onWallSelectArc: () => void
 }
 
-function ToolButton({ tool, active, activeWallType, onClick, onWallSelect }: ToolButtonProps) {
+function ToolButton({ tool, active, activeWallType, isDiagonalMode, isArcMode, onClick, onWallSelectType, onWallSelectDiagonal, onWallSelectArc }: ToolButtonProps) {
   const [flyoutOpen, setFlyoutOpen] = useState(false)
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const didLongPress = useRef(false)
@@ -87,36 +130,45 @@ function ToolButton({ tool, active, activeWallType, onClick, onWallSelect }: Too
   const openFlyout = useCallback(() => setFlyoutOpen(true), [])
   const closeFlyout = useCallback(() => setFlyoutOpen(false), [])
 
-  const handlePointerDown = useCallback((e: React.PointerEvent) => {
-    if (tool.id !== 'wall') return
+  const isWall = tool.id === 'wall'
+
+  const handlePointerDown = useCallback(() => {
+    if (!isWall) return
     didLongPress.current = false
     longPressTimer.current = setTimeout(() => {
       didLongPress.current = true
       openFlyout()
     }, LONG_PRESS_MS)
-  }, [tool.id, openFlyout])
+  }, [isWall, openFlyout])
 
   const handlePointerUp = useCallback(() => {
-    if (longPressTimer.current) {
-      clearTimeout(longPressTimer.current)
-      longPressTimer.current = null
-    }
+    if (longPressTimer.current) { clearTimeout(longPressTimer.current); longPressTimer.current = null }
   }, [])
 
   const handleContextMenu = useCallback((e: React.MouseEvent) => {
-    if (tool.id !== 'wall') return
+    if (!isWall) return
     e.preventDefault()
     openFlyout()
-  }, [tool.id, openFlyout])
+  }, [isWall, openFlyout])
 
   const handleClick = useCallback(() => {
     if (didLongPress.current) { didLongPress.current = false; return }
     onClick()
   }, [onClick])
 
-  const wallLabel = tool.id === 'wall'
-    ? WALL_OPTIONS.find(o => o.type === activeWallType)?.label ?? 'Wall'
+  const wallLabel = isWall
+    ? isArcMode
+      ? 'Arc Wall'
+      : isDiagonalMode
+      ? `Diagonal ${WALL_OPTIONS.find(o => o.type === activeWallType)?.label ?? 'Wall'}`
+      : WALL_OPTIONS.find(o => o.type === activeWallType)?.label ?? 'Wall'
     : tool.label
+
+  const icon = isWall && isArcMode
+    ? <ArcIcon />
+    : isWall && isDiagonalMode
+    ? <Slash size={18} strokeWidth={1.5} />
+    : tool.icon
 
   return (
     <div className="relative">
@@ -126,8 +178,8 @@ function ToolButton({ tool, active, activeWallType, onClick, onWallSelect }: Too
         onPointerUp={handlePointerUp}
         onPointerLeave={handlePointerUp}
         onContextMenu={handleContextMenu}
-        title={tool.id === 'wall'
-          ? `${wallLabel} (${tool.shortcut}) — right-click or hold for wall types`
+        title={isWall
+          ? `${wallLabel}${isArcMode ? ' (C)' : ` (${tool.shortcut})`} — right-click or hold for wall types`
           : `${tool.label} (${tool.shortcut})`
         }
         className={`
@@ -138,23 +190,23 @@ function ToolButton({ tool, active, activeWallType, onClick, onWallSelect }: Too
           }
         `}
       >
-        {tool.icon}
-        {tool.id === 'wall' && (
-          <ChevronRight
-            size={7}
-            className="absolute bottom-0.5 left-0.5 opacity-50"
-            strokeWidth={2.5}
-          />
+        {icon}
+        {isWall && (
+          <ChevronRight size={7} className="absolute bottom-0.5 left-0.5 opacity-50" strokeWidth={2.5} />
         )}
         <span className="absolute bottom-0.5 right-1 text-[8px] font-mono opacity-60">
           {tool.shortcut}
         </span>
       </button>
 
-      {tool.id === 'wall' && flyoutOpen && (
+      {isWall && flyoutOpen && (
         <WallFlyout
           activeWallType={activeWallType}
-          onSelect={onWallSelect}
+          isDiagonalMode={isDiagonalMode}
+          isArcMode={isArcMode}
+          onSelectType={onWallSelectType}
+          onSelectDiagonal={onWallSelectDiagonal}
+          onSelectArc={onWallSelectArc}
           onClose={closeFlyout}
         />
       )}
@@ -163,18 +215,26 @@ function ToolButton({ tool, active, activeWallType, onClick, onWallSelect }: Too
 }
 
 export function LeftToolbar() {
-  const { activeTool, activeWallType, setActiveTool, setActiveWallType } = useStore()
+  const { activeTool, activeWallType, setActiveTool, setActiveWallType, project } = useStore()
+  const isDiagonalMode = activeTool === 'diagonal-wall'
+  const isArcMode = activeTool === 'arc-wall'
+  const isElevation = (project?.mode ?? 'floorplan') === 'elevation'
+  const visibleTools = isElevation ? TOOLS.filter(t => t.id !== 'wall') : TOOLS
 
   return (
     <div className="flex flex-col items-center gap-1 py-2 px-1 w-11 bg-sidebar border-r border-gray-700 shrink-0">
-      {TOOLS.map(tool => (
+      {visibleTools.map(tool => (
         <ToolButton
           key={tool.id}
           tool={tool}
-          active={activeTool === tool.id}
+          active={activeTool === tool.id || (tool.id === 'wall' && (isDiagonalMode || isArcMode))}
           activeWallType={activeWallType}
+          isDiagonalMode={isDiagonalMode}
+          isArcMode={isArcMode}
           onClick={() => setActiveTool(tool.id)}
-          onWallSelect={(type) => setActiveWallType(type)}
+          onWallSelectType={(type) => setActiveWallType(type)}
+          onWallSelectDiagonal={() => setActiveTool('diagonal-wall')}
+          onWallSelectArc={() => setActiveTool('arc-wall')}
         />
       ))}
 

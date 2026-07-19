@@ -1,7 +1,7 @@
 import React from 'react'
-import { useStore } from '../../store/useStore'
+import { useStore, getActiveElements, getActiveDimensions } from '../../store/useStore'
 import { getBloxById } from '../../blox/definitions'
-import { SCALES } from '../../types'
+import { SCALES, Scale } from '../../types'
 import { formatFeet } from '../../utils/scale'
 
 function fmtPreset(ft: number): string {
@@ -13,11 +13,37 @@ function fmtPreset(ft: number): string {
 }
 
 export function PropertiesPanel() {
-  const { project, selectedElementIds, selectedDimIds, activeBloxId, pendingBloxWidth, setPendingBloxWidth, updateElement, deleteSelectedElements, updateDimension, deleteSelectedDims } = useStore()
+  const { project, selectedElementIds, selectedDimIds, activeBloxId, pendingBloxWidth, setPendingBloxWidth, updateElement, deleteSelectedElements, updateDimension, deleteSelectedDims, selectedArcWallIds, updateArcWall, deleteSelectedArcWalls } = useStore()
+
+  // Arc wall selected
+  if (project && selectedArcWallIds.length === 1 && selectedElementIds.length === 0 && selectedDimIds.length === 0) {
+    const wall = (project.arcWalls ?? []).find(w => w.id === selectedArcWallIds[0])
+    if (wall) {
+      return (
+        <div className="flex items-center gap-4 px-4 bg-toolbar border-t border-gray-700 text-xs text-gray-300 h-9 shrink-0">
+          <span className="font-semibold text-gray-200">Arc Wall</span>
+          <span className="text-gray-400">R = {formatFeet(wall.radius)}</span>
+          <label className="flex items-center gap-1">
+            <span className="text-gray-500">Thickness</span>
+            <input
+              type="number"
+              value={wall.thickness.toFixed(3)}
+              step={0.125}
+              min={0.125}
+              onChange={e => updateArcWall(wall.id, { thickness: parseFloat(e.target.value) || wall.thickness })}
+              className="w-16 bg-gray-800 text-white px-1.5 py-0.5 rounded border border-gray-600 text-xs"
+            />
+            <span className="text-gray-600">ft</span>
+          </label>
+          <button onClick={deleteSelectedArcWalls} className="text-red-500 hover:text-red-400 ml-2">Delete</button>
+        </div>
+      )
+    }
+  }
 
   // Show dimension properties when a dim is selected
   if (project && selectedDimIds.length === 1 && selectedElementIds.length === 0) {
-    const dim = project.dimensions.find(d => d.id === selectedDimIds[0])
+    const dim = getActiveDimensions(useStore.getState()).find(d => d.id === selectedDimIds[0])
     if (dim) {
       const isHoriz = Math.abs(dim.x2 - dim.x1) >= Math.abs(dim.y2 - dim.y1)
       const dist = isHoriz ? Math.abs(dim.x2 - dim.x1) : Math.abs(dim.y2 - dim.y1)
@@ -102,7 +128,7 @@ export function PropertiesPanel() {
   }
 
   const id = selectedElementIds[0]
-  const el = project.elements.find(e => e.id === id)
+  const el = getActiveElements(useStore.getState()).find(e => e.id === id)
   if (!el) return null
   const def = getBloxById(el.bloxId)
 
@@ -121,6 +147,319 @@ export function PropertiesPanel() {
             {r}
           </button>
         ))}
+        <button onClick={deleteSelectedElements} className="text-red-500 hover:text-red-400 ml-2">Delete</button>
+      </div>
+    )
+  }
+
+  // Detail bubble — editable number and sheet reference
+  if (el.bloxId === 'annotation-detail-bubble') {
+    return (
+      <div className="flex items-center gap-4 px-4 bg-toolbar border-t border-gray-700 text-xs text-gray-300 h-9 shrink-0">
+        <span className="font-semibold text-gray-200">Detail Bubble</span>
+        <label className="flex items-center gap-1">
+          <span className="text-gray-500">Detail #</span>
+          <input
+            type="text"
+            value={(el.properties.detailNum as string) ?? '1'}
+            onChange={e => updateElement(id, { properties: { ...el.properties, detailNum: e.target.value } })}
+            className="w-12 bg-gray-800 text-white px-1.5 py-0.5 rounded border border-gray-600 text-xs text-center"
+          />
+        </label>
+        <label className="flex items-center gap-1">
+          <span className="text-gray-500">Sheet</span>
+          <input
+            type="text"
+            value={(el.properties.sheetRef as string) ?? 'A-1'}
+            onChange={e => updateElement(id, { properties: { ...el.properties, sheetRef: e.target.value } })}
+            className="w-16 bg-gray-800 text-white px-1.5 py-0.5 rounded border border-gray-600 text-xs text-center"
+          />
+        </label>
+        <button onClick={deleteSelectedElements} className="text-red-500 hover:text-red-400 ml-2">Delete</button>
+      </div>
+    )
+  }
+
+  // Leader arrow — editable label
+  if (el.bloxId === 'annotation-leader') {
+    return (
+      <div className="flex items-center gap-4 px-4 bg-toolbar border-t border-gray-700 text-xs text-gray-300 h-9 shrink-0">
+        <span className="font-semibold text-gray-200">Leader Arrow</span>
+        <label className="flex items-center gap-1 flex-1">
+          <span className="text-gray-500">Label</span>
+          <input
+            type="text"
+            value={(el.properties.label as string) ?? ''}
+            placeholder="Callout text..."
+            onChange={e => updateElement(id, { properties: { ...el.properties, label: e.target.value } })}
+            className="flex-1 bg-gray-800 text-white px-1.5 py-0.5 rounded border border-gray-600 text-xs"
+          />
+        </label>
+        <button onClick={deleteSelectedElements} className="text-red-500 hover:text-red-400 ml-2">Delete</button>
+      </div>
+    )
+  }
+
+  // Section cut — editable label
+  if (el.bloxId === 'annotation-section-cut') {
+    return (
+      <div className="flex items-center gap-4 px-4 bg-toolbar border-t border-gray-700 text-xs text-gray-300 h-9 shrink-0">
+        <span className="font-semibold text-gray-200">Section Cut</span>
+        <label className="flex items-center gap-1">
+          <span className="text-gray-500">Label</span>
+          <input
+            type="text"
+            value={(el.properties.label as string) ?? 'A'}
+            onChange={e => updateElement(id, { properties: { ...el.properties, label: e.target.value } })}
+            className="w-12 bg-gray-800 text-white px-1.5 py-0.5 rounded border border-gray-600 text-xs text-center"
+          />
+        </label>
+        <button onClick={deleteSelectedElements} className="text-red-500 hover:text-red-400 ml-2">Delete</button>
+      </div>
+    )
+  }
+
+  // Grid bubble — editable label
+  if (el.bloxId === 'annotation-grid-bubble') {
+    return (
+      <div className="flex items-center gap-4 px-4 bg-toolbar border-t border-gray-700 text-xs text-gray-300 h-9 shrink-0">
+        <span className="font-semibold text-gray-200">Grid Bubble</span>
+        <label className="flex items-center gap-1">
+          <span className="text-gray-500">Label</span>
+          <input
+            type="text"
+            value={(el.properties.label as string) ?? 'A'}
+            onChange={e => updateElement(id, { properties: { ...el.properties, label: e.target.value } })}
+            className="w-12 bg-gray-800 text-white px-1.5 py-0.5 rounded border border-gray-600 text-xs text-center"
+          />
+        </label>
+        <button onClick={deleteSelectedElements} className="text-red-500 hover:text-red-400 ml-2">Delete</button>
+      </div>
+    )
+  }
+
+  // Drawing title — auto-fills from project data, overrideable
+  if (el.bloxId === 'annotation-drawing-title') {
+    const tb = project?.titleBlock
+    const effectiveTitle      = (el.properties.title      as string | undefined) ?? tb?.drawingTitle ?? project?.name ?? 'DRAWING TITLE'
+    const effectiveDrawingNum = (el.properties.drawingNum as string | undefined) ?? tb?.sheetNumber  ?? 'A-1'
+    const effectiveScale      = (el.properties.scale      as string | undefined) ?? (project ? SCALES[project.scale as Scale]?.label : "1/4\" = 1'-0\"")
+    return (
+      <div className="flex items-center gap-3 px-4 bg-toolbar border-t border-gray-700 text-xs text-gray-300 h-9 shrink-0 min-w-0 overflow-x-auto">
+        <span className="font-semibold text-gray-200 shrink-0">Drawing Title</span>
+        <label className="flex items-center gap-1 shrink-0">
+          <span className="text-gray-500">Title</span>
+          <input type="text" value={effectiveTitle}
+            onChange={e => updateElement(id, { properties: { ...el.properties, title: e.target.value } })}
+            className="w-40 bg-gray-800 text-white px-1.5 py-0.5 rounded border border-gray-600 text-xs" />
+        </label>
+        <label className="flex items-center gap-1 shrink-0">
+          <span className="text-gray-500">Dwg #</span>
+          <input type="text" value={effectiveDrawingNum}
+            onChange={e => updateElement(id, { properties: { ...el.properties, drawingNum: e.target.value } })}
+            className="w-16 bg-gray-800 text-white px-1.5 py-0.5 rounded border border-gray-600 text-xs" />
+        </label>
+        <label className="flex items-center gap-1 shrink-0">
+          <span className="text-gray-500">Scale</span>
+          <input type="text" value={effectiveScale}
+            onChange={e => updateElement(id, { properties: { ...el.properties, scale: e.target.value } })}
+            className="w-28 bg-gray-800 text-white px-1.5 py-0.5 rounded border border-gray-600 text-xs" />
+        </label>
+        <button onClick={deleteSelectedElements} className="text-red-500 hover:text-red-400 ml-2 shrink-0">Delete</button>
+      </div>
+    )
+  }
+
+  // Interior elevation target — view number, sheet ref, direction
+  if (el.bloxId === 'annotation-elevation-target') {
+    const dirs8 = ['right','ne','up','nw','left','sw','down','se']
+    const icons8: Record<string, string> = { right:'→', ne:'↗', up:'↑', nw:'↖', left:'←', sw:'↙', down:'↓', se:'↘' }
+    return (
+      <div className="flex items-center gap-3 px-4 bg-toolbar border-t border-gray-700 text-xs text-gray-300 h-9 shrink-0">
+        <span className="font-semibold text-gray-200 shrink-0">Elevation Target</span>
+        <label className="flex items-center gap-1">
+          <span className="text-gray-500">View #</span>
+          <input type="text" value={(el.properties.viewNum as string) ?? '1'}
+            onChange={e => updateElement(id, { properties: { ...el.properties, viewNum: e.target.value } })}
+            className="w-10 bg-gray-800 text-white px-1.5 py-0.5 rounded border border-gray-600 text-xs text-center" />
+        </label>
+        <label className="flex items-center gap-1">
+          <span className="text-gray-500">Sheet</span>
+          <input type="text" value={(el.properties.sheetRef as string) ?? 'A-3'}
+            onChange={e => updateElement(id, { properties: { ...el.properties, sheetRef: e.target.value } })}
+            className="w-14 bg-gray-800 text-white px-1.5 py-0.5 rounded border border-gray-600 text-xs text-center" />
+        </label>
+        <span className="text-gray-500">Dir</span>
+        <div className="flex items-center gap-0.5">
+          {dirs8.map(d => (
+            <button key={d} onClick={() => updateElement(id, { properties: { ...el.properties, direction: d } })}
+              className={`w-6 h-6 flex items-center justify-center rounded border text-xs transition-colors ${
+                (el.properties.direction ?? 'right') === d ? 'bg-accent border-blue-500 text-white' : 'border-gray-600 text-gray-400 hover:text-white'
+              }`}>{icons8[d]}</button>
+          ))}
+        </div>
+        <button onClick={deleteSelectedElements} className="text-red-500 hover:text-red-400 ml-2 shrink-0">Delete</button>
+      </div>
+    )
+  }
+
+  // Section reference bubble — section number + sheet
+  if (el.bloxId === 'annotation-section-ref') {
+    return (
+      <div className="flex items-center gap-3 px-4 bg-toolbar border-t border-gray-700 text-xs text-gray-300 h-9 shrink-0">
+        <span className="font-semibold text-gray-200 shrink-0">Section Ref</span>
+        <label className="flex items-center gap-1">
+          <span className="text-gray-500">Section #</span>
+          <input type="text" value={(el.properties.secNum as string) ?? 'A'}
+            onChange={e => updateElement(id, { properties: { ...el.properties, secNum: e.target.value } })}
+            className="w-10 bg-gray-800 text-white px-1.5 py-0.5 rounded border border-gray-600 text-xs text-center" />
+        </label>
+        <label className="flex items-center gap-1">
+          <span className="text-gray-500">Sheet</span>
+          <input type="text" value={(el.properties.sheetRef as string) ?? 'A-2'}
+            onChange={e => updateElement(id, { properties: { ...el.properties, sheetRef: e.target.value } })}
+            className="w-14 bg-gray-800 text-white px-1.5 py-0.5 rounded border border-gray-600 text-xs text-center" />
+        </label>
+        <button onClick={deleteSelectedElements} className="text-red-500 hover:text-red-400 ml-2 shrink-0">Delete</button>
+      </div>
+    )
+  }
+
+  // Room tag — room name + number
+  if (el.bloxId === 'annotation-room-tag') {
+    return (
+      <div className="flex items-center gap-3 px-4 bg-toolbar border-t border-gray-700 text-xs text-gray-300 h-9 shrink-0">
+        <span className="font-semibold text-gray-200 shrink-0">Room Tag</span>
+        <label className="flex items-center gap-1">
+          <span className="text-gray-500">Name</span>
+          <input type="text" value={(el.properties.roomName as string) ?? 'ROOM NAME'}
+            onChange={e => updateElement(id, { properties: { ...el.properties, roomName: e.target.value } })}
+            className="w-32 bg-gray-800 text-white px-1.5 py-0.5 rounded border border-gray-600 text-xs" />
+        </label>
+        <label className="flex items-center gap-1">
+          <span className="text-gray-500">Number</span>
+          <input type="text" value={(el.properties.roomNum as string) ?? '101'}
+            onChange={e => updateElement(id, { properties: { ...el.properties, roomNum: e.target.value } })}
+            className="w-16 bg-gray-800 text-white px-1.5 py-0.5 rounded border border-gray-600 text-xs text-center" />
+        </label>
+        <button onClick={deleteSelectedElements} className="text-red-500 hover:text-red-400 ml-2 shrink-0">Delete</button>
+      </div>
+    )
+  }
+
+  // Door tag — hexagon label
+  if (el.bloxId === 'annotation-door-tag') {
+    return (
+      <div className="flex items-center gap-3 px-4 bg-toolbar border-t border-gray-700 text-xs text-gray-300 h-9 shrink-0">
+        <span className="font-semibold text-gray-200 shrink-0">Door Tag</span>
+        <label className="flex items-center gap-1">
+          <span className="text-gray-500">Label</span>
+          <input type="text" value={(el.properties.label as string) ?? '1'}
+            onChange={e => updateElement(id, { properties: { ...el.properties, label: e.target.value } })}
+            className="w-12 bg-gray-800 text-white px-1.5 py-0.5 rounded border border-gray-600 text-xs text-center" />
+        </label>
+        <button onClick={deleteSelectedElements} className="text-red-500 hover:text-red-400 ml-2 shrink-0">Delete</button>
+      </div>
+    )
+  }
+
+  // Column grid (horizontal) — label
+  if (el.bloxId === 'annotation-column-grid-h') {
+    return (
+      <div className="flex items-center gap-3 px-4 bg-toolbar border-t border-gray-700 text-xs text-gray-300 h-9 shrink-0">
+        <span className="font-semibold text-gray-200 shrink-0">Column Grid H</span>
+        <label className="flex items-center gap-1">
+          <span className="text-gray-500">Label</span>
+          <input type="text" value={(el.properties.label as string) ?? 'A'}
+            onChange={e => updateElement(id, { properties: { ...el.properties, label: e.target.value } })}
+            className="w-12 bg-gray-800 text-white px-1.5 py-0.5 rounded border border-gray-600 text-xs text-center" />
+        </label>
+        <button onClick={deleteSelectedElements} className="text-red-500 hover:text-red-400 ml-2 shrink-0">Delete</button>
+      </div>
+    )
+  }
+
+  // Back reference target — ref number + sheet
+  if (el.bloxId === 'annotation-back-reference') {
+    return (
+      <div className="flex items-center gap-3 px-4 bg-toolbar border-t border-gray-700 text-xs text-gray-300 h-9 shrink-0">
+        <span className="font-semibold text-gray-200 shrink-0">Back Reference</span>
+        <label className="flex items-center gap-1">
+          <span className="text-gray-500">Ref #</span>
+          <input type="text" value={(el.properties.refNum as string) ?? '1'}
+            onChange={e => updateElement(id, { properties: { ...el.properties, refNum: e.target.value } })}
+            className="w-12 bg-gray-800 text-white px-1.5 py-0.5 rounded border border-gray-600 text-xs text-center" />
+        </label>
+        <label className="flex items-center gap-1">
+          <span className="text-gray-500">Sheet</span>
+          <input type="text" value={(el.properties.sheetRef as string) ?? 'A-2'}
+            onChange={e => updateElement(id, { properties: { ...el.properties, sheetRef: e.target.value } })}
+            className="w-14 bg-gray-800 text-white px-1.5 py-0.5 rounded border border-gray-600 text-xs text-center" />
+        </label>
+        <button onClick={deleteSelectedElements} className="text-red-500 hover:text-red-400 ml-2 shrink-0">Delete</button>
+      </div>
+    )
+  }
+
+  // Floor elevation marker — elevation value
+  if (el.bloxId === 'annotation-floor-elevation') {
+    return (
+      <div className="flex items-center gap-3 px-4 bg-toolbar border-t border-gray-700 text-xs text-gray-300 h-9 shrink-0">
+        <span className="font-semibold text-gray-200 shrink-0">Floor Elevation</span>
+        <label className="flex items-center gap-1">
+          <span className="text-gray-500">Elevation</span>
+          <input type="text" value={(el.properties.elevation as string) ?? "± 0'-0\""}
+            onChange={e => updateElement(id, { properties: { ...el.properties, elevation: e.target.value } })}
+            className="w-24 bg-gray-800 text-white px-1.5 py-0.5 rounded border border-gray-600 text-xs text-center" />
+        </label>
+        <button onClick={deleteSelectedElements} className="text-red-500 hover:text-red-400 ml-2 shrink-0">Delete</button>
+      </div>
+    )
+  }
+
+  // Revision delta — label
+  if (el.bloxId === 'annotation-revision-delta') {
+    return (
+      <div className="flex items-center gap-3 px-4 bg-toolbar border-t border-gray-700 text-xs text-gray-300 h-9 shrink-0">
+        <span className="font-semibold text-gray-200 shrink-0">Revision Delta</span>
+        <label className="flex items-center gap-1">
+          <span className="text-gray-500">Label</span>
+          <input type="text" value={(el.properties.label as string) ?? '1'}
+            onChange={e => updateElement(id, { properties: { ...el.properties, label: e.target.value } })}
+            className="w-12 bg-gray-800 text-white px-1.5 py-0.5 rounded border border-gray-600 text-xs text-center" />
+        </label>
+        <button onClick={deleteSelectedElements} className="text-red-500 hover:text-red-400 ml-2 shrink-0">Delete</button>
+      </div>
+    )
+  }
+
+  // Elevation marker — editable label + direction
+  if (el.bloxId === 'annotation-elevation-marker') {
+    const dirs = ['right', 'up', 'left', 'down']
+    const icons: Record<string, string> = { right: '→', up: '↑', left: '←', down: '↓' }
+    return (
+      <div className="flex items-center gap-4 px-4 bg-toolbar border-t border-gray-700 text-xs text-gray-300 h-9 shrink-0">
+        <span className="font-semibold text-gray-200">Elevation Marker</span>
+        <label className="flex items-center gap-1">
+          <span className="text-gray-500">Label</span>
+          <input
+            type="text"
+            value={(el.properties.label as string) ?? '1'}
+            onChange={e => updateElement(id, { properties: { ...el.properties, label: e.target.value } })}
+            className="w-10 bg-gray-800 text-white px-1.5 py-0.5 rounded border border-gray-600 text-xs text-center"
+          />
+        </label>
+        <span className="text-gray-500">Direction</span>
+        <div className="flex items-center gap-1">
+          {dirs.map(d => (
+            <button key={d}
+              onClick={() => updateElement(id, { properties: { ...el.properties, direction: d } })}
+              className={`w-6 h-6 flex items-center justify-center rounded border text-xs transition-colors ${
+                (el.properties.direction ?? 'right') === d ? 'bg-accent border-blue-500 text-white' : 'border-gray-600 text-gray-400 hover:text-white'
+              }`}
+            >{icons[d]}</button>
+          ))}
+        </div>
         <button onClick={deleteSelectedElements} className="text-red-500 hover:text-red-400 ml-2">Delete</button>
       </div>
     )
@@ -312,6 +651,44 @@ export function PropertiesPanel() {
       <span className="text-gray-600">
         ({formatFeet(el.x)}, {formatFeet(el.y)})
       </span>
+
+      {/* Fill pattern + color — shown for elevation surface blox and shapes */}
+      {['elev-wall-face', 'elev-spandrel-panel', 'elev-parapet', 'elev-cantilever-slab', 'elev-pier', 'shape-rect', 'shape-polygon'].includes(el.bloxId) && (() => {
+        const PATTERNS: { id: string; label: string; preview: string }[] = [
+          { id: 'brick',       label: 'Brick',  preview: '▦' },
+          { id: 'stone',       label: 'Stone',  preview: '▤' },
+          { id: 'board-batten',label: 'Siding', preview: '▥' },
+          { id: 'concrete',    label: 'Conc.',  preview: '·' },
+          { id: 'plain',       label: 'Plain',  preview: '□' },
+        ]
+        const currentPattern = (el.properties.fillPattern as string) ?? (el.bloxId === 'elev-wall-face' ? 'brick' : 'plain')
+        const currentColor = (el.properties.fillColor as string) ?? '#C8966C'
+        return (
+          <div className="flex items-center gap-1 border-l border-gray-700 pl-3">
+            <span className="text-gray-500 mr-1">Fill</span>
+            <input
+              type="color"
+              value={currentColor.startsWith('#') ? currentColor : '#C8966C'}
+              onChange={e => updateElement(id, { properties: { ...el.properties, fillColor: e.target.value } })}
+              title="Fill color"
+              className="w-6 h-5 rounded cursor-pointer border border-gray-600 bg-transparent p-0"
+              style={{ padding: 0 }}
+            />
+            {PATTERNS.map(p => (
+              <button
+                key={p.id}
+                title={p.label}
+                onClick={() => updateElement(id, { properties: { ...el.properties, fillPattern: p.id } })}
+                className={`px-1.5 py-0.5 rounded text-[10px] border transition-colors ${
+                  currentPattern === p.id
+                    ? 'bg-blue-800 border-blue-500 text-white'
+                    : 'border-gray-600 text-gray-400 hover:border-gray-400 hover:text-gray-200'
+                }`}
+              >{p.preview} {p.label}</button>
+            ))}
+          </div>
+        )
+      })()}
 
       {/* Flip buttons — available on all elements */}
       <button

@@ -12,7 +12,9 @@ export const SCALES: Record<Scale, ScaleConfig> = {
   half: { label: '1/2" = 1\'', pixelsPerFoot: 48, snapFeet: 0.25 }
 }
 
-export type Tool = 'select' | 'hand' | 'dimension' | 'wall' | 'rect'
+export type DrawingMode = 'floorplan' | 'elevation' | 'detail'
+
+export type Tool = 'select' | 'hand' | 'dimension' | 'wall' | 'rect' | 'diagonal-wall' | 'polygon' | 'arc-wall'
 export type WallType = 'wall-exterior' | 'wall-interior' | 'wall-cmu'
 
 export interface DimensionLine {
@@ -32,8 +34,10 @@ export type BloxCategory =
   | 'Furniture'
   | 'Casework'
   | 'Structural'
+  | 'Details'
   | 'Annotations'
   | 'Fire/Safety'
+  | 'Elevation'
 
 export interface Layer {
   id: string
@@ -41,6 +45,32 @@ export interface Layer {
   visible: boolean
   locked: boolean
   color: string
+}
+
+export interface ElementGroup {
+  id: string
+  name: string
+}
+
+export interface BloxPlacement {
+  /** Which edge of the blox (at rotation=0) butts against the wall face */
+  wallFaceEdge?: 'top' | 'bottom' | 'left' | 'right'
+  /** Feet the blox extends from the wall face into the room */
+  intoRoom?: number
+  /** When true, height automatically matches wall thickness (windows, doors, openings) */
+  fillsWallThickness?: boolean
+  /** Minimum clear floor space required in front (ft) — ADA / code */
+  clearanceFront?: number
+  /** Minimum clear space on each side (ft) */
+  clearanceSide?: number
+  /** Allowed rotation increments in degrees. Omit = free rotation. */
+  validRotations?: number[]
+  /** Room types this blox typically appears in */
+  typicalRooms?: string[]
+  /** Doors: swing arc extends into the room (away from wallFaceEdge) */
+  swingIntoRoom?: boolean
+  /** Doors: which end has the hinge at rotation=0 */
+  hingeEdge?: 'left' | 'right'
 }
 
 export interface BloxDefinition {
@@ -55,6 +85,8 @@ export interface BloxDefinition {
   minWidth?: number
   minHeight?: number
   widthPresets?: number[]  // common widths in feet shown as quick-pick chips
+  placementNote?: string   // freeform AI placement note (legacy — prefer placement block)
+  placement?: BloxPlacement
 }
 
 export interface PlacedElement {
@@ -68,6 +100,19 @@ export interface PlacedElement {
   properties: Record<string, unknown>
   locked: boolean
   layerId?: string
+  groupId?: string
+}
+
+export interface ArcWall {
+  id: string
+  cx: number
+  cy: number
+  radius: number
+  startAngle: number
+  endAngle: number
+  thickness: number
+  layerId?: string
+  locked?: boolean
 }
 
 export interface TitleBlock {
@@ -87,13 +132,33 @@ export interface ChecklistItem {
   category: string
 }
 
+export type UnderlayCalibration =
+  | { method: 'simple'; realWidthFt: number }
+  | { method: 'two-point'; p1px: { x: number; y: number }; p2px: { x: number; y: number }; realDistFt: number }
+
+export interface Underlay {
+  imageData: string        // base64 data URI
+  naturalWidth: number
+  naturalHeight: number
+  opacity: number          // 0.1–1.0
+  visible: boolean
+  calibration: UnderlayCalibration | null
+  description?: string     // user-written note about what's in the image (helps AI interpretation)
+}
+
 export interface Project {
   id: string
   name: string
   scale: Scale
+  mode?: DrawingMode
   elements: PlacedElement[]
   dimensions: DimensionLine[]
+  detailElements?: PlacedElement[]
+  detailDimensions?: DimensionLine[]
   titleBlock?: TitleBlock
   checklist?: ChecklistItem[]
   layers?: Layer[]
+  groups?: ElementGroup[]
+  underlay?: Underlay
+  arcWalls?: ArcWall[]
 }
