@@ -2,6 +2,7 @@ import React from 'react'
 import { Group, Rect, Line, Arc, Ellipse, Circle, Text, Shape } from 'react-konva'
 import { useStore } from '../../store/useStore'
 import { SCALES } from '../../types'
+import { LINE_WEIGHTS } from '../../utils/lineWeights'
 
 interface RendererProps {
   widthPx: number
@@ -11,9 +12,10 @@ interface RendererProps {
 }
 
 const STROKE = '#1A1A1A'
-const STROKE_THIN = 0.5
-const STROKE_MED = 0.75
-const STROKE_HEAVY = 1.2
+const STROKE_THIN = LINE_WEIGHTS.detail
+const STROKE_MED = LINE_WEIGHTS.object
+const STROKE_HEAVY = LINE_WEIGHTS.heavy
+const STROKE_CUT = LINE_WEIGHTS.cut
 const ARC_FONT = "Arial, 'Helvetica Neue', sans-serif"
 
 // ─── WALLS ───────────────────────────────────────────────────────────────────
@@ -23,7 +25,7 @@ export function ExteriorWallRenderer({ widthPx, heightPx }: RendererProps) {
     <Group>
       <Rect
         width={widthPx} height={heightPx}
-        fill="#3C3C3C" stroke={STROKE} strokeWidth={STROKE_THIN}
+        fill="#3C3C3C" stroke={STROKE} strokeWidth={STROKE_CUT}
       />
       {/* Cross-hatch lines for exterior wall */}
       <Shape
@@ -56,7 +58,7 @@ export function InteriorWallRenderer({ widthPx, heightPx }: RendererProps) {
   return (
     <Rect
       width={widthPx} height={heightPx}
-      fill="#5A5A5A" stroke={STROKE} strokeWidth={STROKE_THIN}
+      fill="#5A5A5A" stroke={STROKE} strokeWidth={STROKE_CUT}
     />
   )
 }
@@ -70,7 +72,7 @@ export function CMUWallRenderer({ widthPx, heightPx }: RendererProps) {
 
   return (
     <Group>
-      <Rect width={widthPx} height={heightPx} fill="#888" stroke={STROKE} strokeWidth={STROKE_THIN} />
+      <Rect width={widthPx} height={heightPx} fill="#888" stroke={STROKE} strokeWidth={STROKE_CUT} />
       {/* horizontal mortar line */}
       <Line points={[0, blockH, widthPx, blockH]} stroke="#555" strokeWidth={0.5} />
       {/* vertical mortar lines - top row */}
@@ -933,7 +935,7 @@ export function DishwasherRenderer({ widthPx, heightPx }: RendererProps) {
 export function SquareColumnRenderer({ widthPx, heightPx }: RendererProps) {
   return (
     <Group>
-      <Rect width={widthPx} height={heightPx} fill="#404040" stroke={STROKE} strokeWidth={STROKE_THIN} />
+      <Rect width={widthPx} height={heightPx} fill="#404040" stroke={STROKE} strokeWidth={STROKE_CUT} />
       {/* Diagonal cross for solid fill indication */}
       <Line points={[0, 0, widthPx, heightPx]} stroke="#666" strokeWidth={0.5} />
       <Line points={[widthPx, 0, 0, heightPx]} stroke="#666" strokeWidth={0.5} />
@@ -945,7 +947,7 @@ export function RoundColumnRenderer({ widthPx, heightPx }: RendererProps) {
   const r = Math.min(widthPx, heightPx) / 2
   return (
     <Group>
-      <Circle x={widthPx / 2} y={heightPx / 2} radius={r} fill="#404040" stroke={STROKE} strokeWidth={STROKE_THIN} />
+      <Circle x={widthPx / 2} y={heightPx / 2} radius={r} fill="#404040" stroke={STROKE} strokeWidth={STROKE_CUT} />
       <Circle x={widthPx / 2} y={heightPx / 2} radius={r * 0.6} fill="#555" stroke="#666" strokeWidth={0.4} />
     </Group>
   )

@@ -3,6 +3,7 @@ import { Layer, Group, Line, Text, Circle } from 'react-konva'
 import Konva from 'konva'
 import { DimensionLine } from '../../types'
 import { formatFeet, formatInches } from '../../utils/scale'
+import { LINE_WEIGHTS } from '../../utils/lineWeights'
 import { DrawingMode } from '../../types'
 
 interface DimShapeProps {
@@ -98,13 +99,13 @@ function DimShape({ dim, pixelsPerFoot, selected, preview, mode, onClick, onOffs
   return (
     <Group opacity={opacity} onClick={(e) => { e.cancelBubble = true; onClick?.(e) }}>
       {/* Extension lines */}
-      <Line points={ext1Pts} stroke={color} strokeWidth={0.8} listening={false} />
-      <Line points={ext2Pts} stroke={color} strokeWidth={0.8} listening={false} />
+      <Line points={ext1Pts} stroke={color} strokeWidth={LINE_WEIGHTS.reference} listening={false} />
+      <Line points={ext2Pts} stroke={color} strokeWidth={LINE_WEIGHTS.reference} listening={false} />
 
       {/* Dimension line (clickable hit area slightly wider) */}
       <Line
         points={dimLinePts}
-        stroke={color} strokeWidth={selected ? 1.5 : 0.8}
+        stroke={color} strokeWidth={selected ? 1.5 : LINE_WEIGHTS.reference}
         hitStrokeWidth={10}
       />
 

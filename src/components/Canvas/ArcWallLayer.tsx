@@ -2,6 +2,7 @@ import React from 'react'
 import { Layer, Shape } from 'react-konva'
 import Konva from 'konva'
 import { useStore } from '../../store/useStore'
+import { LINE_WEIGHTS } from '../../utils/lineWeights'
 
 interface Props {
   pixelsPerFoot: number
@@ -47,7 +48,7 @@ export function ArcWallLayer({ pixelsPerFoot: p }: Props) {
             }}
             fill={isSelected ? '#505050' : '#3C3C3C'}
             stroke={isSelected ? '#4F9EFF' : '#222222'}
-            strokeWidth={isSelected ? 2 : 0.5}
+            strokeWidth={isSelected ? LINE_WEIGHTS.cut + 0.5 : LINE_WEIGHTS.cut}
             onClick={(e: Konva.KonvaEventObject<MouseEvent>) => {
               if (layer?.locked || wall.locked) return
               e.cancelBubble = true

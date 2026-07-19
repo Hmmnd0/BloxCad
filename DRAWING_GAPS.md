@@ -63,7 +63,7 @@ These are missing capabilities, not missing blox.
 
 | Gap | Priority | Notes |
 |-----|----------|-------|
-| **Line weight control** | High | Professional drawings use heavy lines for cut elements, medium for visible-beyond-cut, light for reference. Everything in BloxCad renders at the same weight. This is the single biggest thing making exports look like sketches. |
+| ~~Line weight control~~ ✅ Done | High | Pen-weight hierarchy implemented in `src/utils/lineWeights.ts`: cut (walls, columns) 2.25, heavy (elevation profiles) 1.5, object outlines 1.0, reference (dimensions) 0.6, detail linework 0.5. |
 | **Freeform hatch tool** | High | A way to apply a hatch pattern to any area (not just specific blox). The polygon blox partially helps but can't apply different hatch types. |
 | **Dimension in feet-inches** | High | Current dims show decimal feet. US construction drawings use 7'-6", not 7.5 ft. |
 | Arc / curve drawing | Medium | No way to draw curved walls, curved stairs, or circular rooms. |
@@ -74,7 +74,7 @@ These are missing capabilities, not missing blox.
 
 ## Priority Order
 
-1. **Line weight control** — affects every export immediately, no new blox needed
+1. ~~**Line weight control**~~ ✅ Done — pen-weight hierarchy in `src/utils/lineWeights.ts`
 2. **Section cut marker + column grid** — unlocks an entire class of professional drawings
 3. **Dimension feet-inches format** — affects every US project
 4. **Elevator + ramp** — commonly needed, missing from floor plan library
