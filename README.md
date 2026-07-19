@@ -37,6 +37,7 @@ Architectural floor plan drawing tool built with Electron, React, and Konva.js.
 | `⌘A` | Select all |
 | `Delete` / `Backspace` | Delete selected |
 | `R` | Rotate selected 90° |
+| `⇧R` | Rotate selected 45° |
 
 ### View
 
