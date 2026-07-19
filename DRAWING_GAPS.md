@@ -12,10 +12,10 @@ The biggest missing category. Without these, drawings can't reference each other
 |-----|-------|
 | ~~Section cut marker~~ ✅ | `annotation-section-cut` + `annotation-section-ref` exist |
 | ~~Detail bubble / reference tag~~ ✅ | `annotation-detail-bubble` exists |
-| ~~Column grid~~ ✅ (partial) | `annotation-column-grid-h` exists. Missing: vertical variant with upright bubble text (rotating the H variant turns the label sideways). |
+| ~~Column grid~~ ✅ | `annotation-column-grid-h` (horizontal) + `annotation-grid-bubble` (vertical, upright text) |
 | ~~Spot elevation marker~~ ✅ | `annotation-elevation-marker` + `annotation-elevation-target` exist |
 | ~~Break line~~ ✅ | `annotation-break-line` exists |
-| Slope / pitch indicator | Arrow with "1:12" or "4:12" notation. Needed for ramps, roofs, drainage slopes. Still missing. |
+| ~~Slope / pitch indicator~~ ✅ | `annotation-slope-arrow` — properties.slopeLabel sets the ratio text |
 
 ---
 
@@ -39,9 +39,9 @@ Completely absent. Site plans are currently impossible.
 |-----|-------|
 | ~~Elevator / lift~~ ✅ | `fixture-elevator` exists |
 | ~~Ramp~~ ✅ | `fixture-ramp` exists |
-| Closet rod and shelf | Standard interior annotation. Still missing. |
-| Accessible (wheelchair) symbol | Required on accessible drawings. Still missing. |
-| Plumbing chase / shaft | Cross-hatched rectangle used for coordination. Still missing. |
+| ~~Closet rod and shelf~~ ✅ | `casework-closet-rod` exists |
+| ~~Accessible (wheelchair) symbol~~ ✅ | `annotation-accessible` — ISA symbol |
+| ~~Plumbing chase / shaft~~ ✅ | `structural-plumbing-chase` — cross-hatched, cut-weight outline |
 
 ---
 
@@ -82,4 +82,4 @@ These are missing capabilities, not missing blox.
 6. **Freeform hatch tool** — improves material legibility across all drawing modes
 7. **Detail / section structural elements** — below-grade/concrete/steel: footing, slab on grade, W-shape, rebar, membrane (Details category is all wood-frame today)
 8. ~~**Arc / curve tool**~~ ✅ Done
-9. **Small-gaps sweep** — slope arrow, accessible symbol, closet rod, plumbing chase, vertical column grid
+9. ~~**Small-gaps sweep**~~ ✅ Done — slope arrow, accessible symbol, plumbing chase added; closet rod and vertical grid already existed

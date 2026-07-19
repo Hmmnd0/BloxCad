@@ -1169,6 +1169,18 @@ export const BLOX_DEFINITIONS: BloxDefinition[] = [
     minWidth: 1,
     minHeight: 1
   },
+  {
+    id: 'structural-plumbing-chase',
+    name: 'Plumbing Chase',
+    category: 'Structural',
+    description: 'Plumbing chase / shaft — cross-hatched coordination rectangle for stacked wet walls and risers',
+    defaultWidth: 2,
+    defaultHeight: 1,
+    isResizable: true,
+    resizeAxis: 'both',
+    minWidth: 0.5,
+    minHeight: 0.5
+  },
 
   // ── ANNOTATIONS ──────────────────────────────────────────────────────────
   {
@@ -1305,6 +1317,29 @@ export const BLOX_DEFINITIONS: BloxDefinition[] = [
     resizeAxis: 'both',
     minWidth: 3,
     minHeight: 2
+  },
+  {
+    id: 'annotation-slope-arrow',
+    name: 'Slope Arrow',
+    category: 'Annotations',
+    description: 'Slope/pitch direction arrow with ratio label (properties.slopeLabel, e.g. "1:12") — for ramps, roofs, drainage. Arrow points downhill.',
+    defaultWidth: 6,
+    defaultHeight: 1.5,
+    isResizable: true,
+    resizeAxis: 'x',
+    minWidth: 3
+  },
+  {
+    id: 'annotation-accessible',
+    name: 'Accessible Symbol',
+    category: 'Annotations',
+    description: 'International Symbol of Access (wheelchair) — marks accessible routes, parking stalls, and entries',
+    defaultWidth: 2.5,
+    defaultHeight: 2.5,
+    isResizable: true,
+    resizeAxis: 'both',
+    minWidth: 1.5,
+    minHeight: 1.5
   },
 
   // ── FIRE/SAFETY ──────────────────────────────────────────────────────────

@@ -588,6 +588,30 @@ function BloxThumbnail({ bloxId }: { bloxId: string }) {
         <path d="M20,5 Q28,3 33,9 Q39,14 37,22 Q39,30 32,34 Q26,39 20,36 Q13,39 8,34 Q2,30 3,22 Q1,14 7,9 Q12,3 20,5Z" fill="none" stroke="#111" strokeWidth={1.2}/>
       </svg>
     ),
+    'annotation-slope-arrow': (
+      <svg width={s} height={s} viewBox="0 0 40 40">
+        <text x={20} y={14} fontSize={8} textAnchor="middle" fill="#111" fontFamily="sans-serif">1:12</text>
+        <line x1={3} y1={24} x2={31} y2={24} stroke="#111" strokeWidth={1}/>
+        <polygon points="30,20 38,24 30,28" fill="#111"/>
+      </svg>
+    ),
+    'annotation-accessible': (
+      <svg width={s} height={s} viewBox="0 0 40 40">
+        <rect x={3} y={3} width={34} height={34} rx={5} fill="#1E6BB8"/>
+        <circle cx={21} cy={10} r={3} fill="white"/>
+        <path d="M21,13 L21,23 L29,23 L29,29" fill="none" stroke="white" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round"/>
+        <line x1={21} y1={17} x2={27} y2={17} stroke="white" strokeWidth={2} strokeLinecap="round"/>
+        <path d="M14,17 A9,9 0 1,0 26,31" fill="none" stroke="white" strokeWidth={2}/>
+      </svg>
+    ),
+    'structural-plumbing-chase': (
+      <svg width={s} height={s} viewBox="0 0 40 40">
+        <rect x={4} y={10} width={32} height={20} fill="white" stroke="#111" strokeWidth={1.5}/>
+        {[0,8,16,24,32].map(x=><line key={x} x1={4+x-6} y1={10} x2={4+x+14} y2={30} stroke="#999" strokeWidth={0.5}/>)}
+        {[0,8,16,24,32].map(x=><line key={`r${x}`} x1={4+x+14} y1={10} x2={4+x-6} y2={30} stroke="#999" strokeWidth={0.5}/>)}
+        <rect x={4} y={10} width={32} height={20} fill="none" stroke="#111" strokeWidth={1.5}/>
+      </svg>
+    ),
     'shape-rect': (
       <svg width={s} height={s} viewBox="0 0 40 40">
         <rect x={4} y={8} width={32} height={24} fill="rgba(255,255,255,0.6)" stroke="#111" strokeWidth={1}/>

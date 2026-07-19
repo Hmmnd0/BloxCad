@@ -2925,6 +2925,89 @@ export function AnnotationRevisionCloudRenderer({ widthPx, heightPx }: RendererP
   )
 }
 
+export function AnnotationSlopeArrowRenderer({ widthPx, heightPx, properties }: RendererProps) {
+  const label = typeof properties.slopeLabel === 'string' ? properties.slopeLabel : '1:12'
+  const cy = heightPx * 0.7
+  const ah = Math.min(heightPx * 0.4, 9)
+  return (
+    <Group>
+      <Line points={[0, cy, widthPx - ah, cy]} stroke={STROKE} strokeWidth={LINE_WEIGHTS.reference} />
+      <Line
+        points={[widthPx - ah * 2, cy - ah * 0.65, widthPx, cy, widthPx - ah * 2, cy + ah * 0.65]}
+        closed fill={STROKE} stroke={STROKE} strokeWidth={0.4}
+      />
+      <Text
+        x={0} y={cy - ah * 0.65 - 11} width={widthPx - ah}
+        text={label} fontSize={9} fill={STROKE} fontFamily={ARC_FONT} align="center"
+      />
+    </Group>
+  )
+}
+
+export function AnnotationAccessibleRenderer({ widthPx, heightPx }: RendererProps) {
+  const s = Math.min(widthPx, heightPx)
+  const ox = (widthPx - s) / 2
+  const oy = (heightPx - s) / 2
+  const u = (v: number) => v * s
+  return (
+    <Group>
+      <Rect
+        x={ox} y={oy} width={s} height={s} cornerRadius={u(0.12)}
+        fill="#1E6BB8" stroke={STROKE} strokeWidth={STROKE_THIN}
+      />
+      <Group x={ox} y={oy}>
+        {/* head */}
+        <Circle x={u(0.52)} y={u(0.19)} radius={u(0.08)} fill="white" />
+        {/* torso, seat, and lower leg */}
+        <Line
+          points={[u(0.52), u(0.28), u(0.52), u(0.55), u(0.74), u(0.55), u(0.74), u(0.72)]}
+          stroke="white" strokeWidth={u(0.07)} lineCap="round" lineJoin="round"
+        />
+        {/* arm */}
+        <Line points={[u(0.52), u(0.38), u(0.7), u(0.38)]} stroke="white" strokeWidth={u(0.06)} lineCap="round" />
+        {/* wheel */}
+        <Arc
+          x={u(0.46)} y={u(0.6)} innerRadius={u(0.25)} outerRadius={u(0.25)}
+          angle={300} rotation={30} stroke="white" strokeWidth={u(0.06)}
+        />
+      </Group>
+    </Group>
+  )
+}
+
+export function StructuralPlumbingChaseRenderer({ widthPx, heightPx }: RendererProps) {
+  return (
+    <Group>
+      <Rect width={widthPx} height={heightPx} fill="white" stroke={STROKE} strokeWidth={STROKE_CUT} />
+      <Shape
+        sceneFunc={(ctx) => {
+          const nctx = (ctx as unknown as { _context: CanvasRenderingContext2D })._context
+          nctx.save()
+          nctx.beginPath()
+          nctx.rect(0, 0, widthPx, heightPx)
+          nctx.clip()
+          nctx.strokeStyle = '#888'
+          nctx.lineWidth = 0.5
+          const spacing = 6
+          const diagonal = widthPx + heightPx
+          for (let t = -diagonal; t < diagonal; t += spacing) {
+            nctx.beginPath()
+            nctx.moveTo(t, 0)
+            nctx.lineTo(t + heightPx, heightPx)
+            nctx.stroke()
+            nctx.beginPath()
+            nctx.moveTo(t + heightPx, 0)
+            nctx.lineTo(t, heightPx)
+            nctx.stroke()
+          }
+          nctx.restore()
+        }}
+        listening={false}
+      />
+    </Group>
+  )
+}
+
 // ─── BAY WINDOW ──────────────────────────────────────────────────────────────
 
 export function ElevBayWindowRenderer({ widthPx, heightPx, properties }: RendererProps) {
@@ -4134,6 +4217,9 @@ export const RENDERERS: Record<string, RendererComponent> = {
   'annotation-floor-elevation': AnnotationFloorElevationRenderer,
   'annotation-work-point': AnnotationWorkPointRenderer,
   'annotation-revision-delta': AnnotationRevisionDeltaRenderer,
+  'annotation-slope-arrow': AnnotationSlopeArrowRenderer,
+  'annotation-accessible': AnnotationAccessibleRenderer,
+  'structural-plumbing-chase': StructuralPlumbingChaseRenderer,
   'wall-fire-1hr': FireWall1HrRenderer,
   'wall-fire-2hr': FireWall2HrRenderer,
   'fire-extinguisher': FireExtinguisherRenderer,
