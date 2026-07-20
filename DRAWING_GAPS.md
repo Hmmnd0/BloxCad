@@ -21,15 +21,15 @@ The biggest missing category. Without these, drawings can't reference each other
 
 ## Site / Landscape
 
-Completely absent. Site plans are currently impossible.
+✅ Category added — site plans now possible.
 
 | Gap | Notes |
 |-----|-------|
-| Tree / shrub symbol | Standard plan-view circle with radial lines |
-| Parking stall + drive aisle | Standard 9×18 ft stall with striping |
-| Property line / setback | Dashed dot-dash line with label |
-| Sidewalk / paving hatch | Surface material pattern for hardscape |
-| Contour line | Topographic elevation line with label |
+| ~~Tree / shrub symbol~~ ✅ | `site-tree` (canopy + radial branches) and `site-shrub` (scalloped outline) |
+| ~~Parking stall + drive aisle~~ ✅ | `site-parking-stall` — 9×18 ft; widen to add stalls (stripe every 9 ft) |
+| ~~Property line / setback~~ ✅ | `site-property-line` — dash-dot pattern with PL label |
+| ~~Sidewalk / paving hatch~~ ✅ | `site-sidewalk` — control joints every 5 ft + concrete stipple |
+| ~~Contour line~~ ✅ | `site-contour` — undulating line, elevation label via properties.elevLabel |
 
 ---
 
@@ -78,7 +78,7 @@ These are missing capabilities, not missing blox.
 2. ~~**Section cut marker + column grid**~~ ✅ Done (vertical grid variant still open)
 3. ~~**Dimension feet-inches format**~~ ✅ Done
 4. ~~**Elevator + ramp**~~ ✅ Done
-5. **Site / landscape blox** — opens up a new drawing type entirely (tree, parking, property line, paving, contour)
+5. ~~**Site / landscape blox**~~ ✅ Done — Site category: tree, shrub, parking stall, property line, sidewalk, contour
 6. **Freeform hatch tool** — improves material legibility across all drawing modes
 7. **Detail / section structural elements** — below-grade/concrete/steel: footing, slab on grade, W-shape, rebar, membrane (Details category is all wood-frame today)
 8. ~~**Arc / curve tool**~~ ✅ Done

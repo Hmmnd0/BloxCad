@@ -1874,6 +1874,84 @@ export const BLOX_DEFINITIONS: BloxDefinition[] = [
     minWidth: 1,
     widthPresets: [4, 6, 8, 10, 12, 16, 20]
   },
+
+  // ── SITE / LANDSCAPE
+  {
+    id: 'site-tree',
+    name: 'Tree',
+    category: 'Site',
+    description: 'Deciduous tree, plan view — canopy circle with radial branch lines and center trunk dot',
+    defaultWidth: 15,
+    defaultHeight: 15,
+    isResizable: true,
+    resizeAxis: 'both',
+    minWidth: 4,
+    minHeight: 4,
+    widthPresets: [8, 12, 15, 20, 30]
+  },
+  {
+    id: 'site-shrub',
+    name: 'Shrub',
+    category: 'Site',
+    description: 'Shrub / bush, plan view — scalloped outline circle',
+    defaultWidth: 4,
+    defaultHeight: 4,
+    isResizable: true,
+    resizeAxis: 'both',
+    minWidth: 1.5,
+    minHeight: 1.5,
+    widthPresets: [2, 3, 4, 6]
+  },
+  {
+    id: 'site-parking-stall',
+    name: 'Parking Stall',
+    category: 'Site',
+    description: 'Standard parking stall with striping — 9×18 ft; widen to add stalls (each 9 ft of width = one stall)',
+    defaultWidth: 9,
+    defaultHeight: 18,
+    isResizable: true,
+    resizeAxis: 'both',
+    minWidth: 8,
+    minHeight: 16,
+    widthPresets: [9, 18, 27, 36, 45]
+  },
+  {
+    id: 'site-property-line',
+    name: 'Property Line',
+    category: 'Site',
+    description: 'Property / setback line — long-dash dot-dash pattern with "PL" label',
+    defaultWidth: 50,
+    defaultHeight: 1,
+    isResizable: true,
+    resizeAxis: 'x',
+    minWidth: 5,
+    widthPresets: [25, 50, 100, 150, 200]
+  },
+  {
+    id: 'site-sidewalk',
+    name: 'Sidewalk / Paving',
+    category: 'Site',
+    description: 'Concrete sidewalk or paving area — outline with control-joint lines and light stipple',
+    defaultWidth: 20,
+    defaultHeight: 5,
+    isResizable: true,
+    resizeAxis: 'both',
+    minWidth: 3,
+    minHeight: 3,
+    widthPresets: [10, 20, 40, 60]
+  },
+  {
+    id: 'site-contour',
+    name: 'Contour Line',
+    category: 'Site',
+    description: 'Topographic contour line — gently undulating line with elevation label (properties.elevLabel, default "100")',
+    defaultWidth: 40,
+    defaultHeight: 4,
+    isResizable: true,
+    resizeAxis: 'x',
+    minWidth: 10,
+    widthPresets: [20, 40, 80, 120]
+  },
 ]
 
 export function getBloxById(id: string): BloxDefinition | undefined {
@@ -1892,11 +1970,12 @@ export const BLOX_CATEGORIES = [
   'Annotations',
   'Fire/Safety',
   'Elevation',
+  'Site',
 ] as const
 
 export const FLOORPLAN_CATEGORIES = [
   'Walls', 'Openings', 'Stairs', 'Fixtures', 'Furniture',
-  'Casework', 'Structural', 'Annotations', 'Fire/Safety',
+  'Casework', 'Structural', 'Site', 'Annotations', 'Fire/Safety',
 ] as const
 
 export const ELEVATION_CATEGORIES = [

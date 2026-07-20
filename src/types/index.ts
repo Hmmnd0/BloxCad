@@ -38,6 +38,7 @@ export type BloxCategory =
   | 'Annotations'
   | 'Fire/Safety'
   | 'Elevation'
+  | 'Site'
 
 export interface Layer {
   id: string

@@ -18,6 +18,7 @@ const CATEGORY_ICONS: Record<string, string> = {
   Annotations: '✎',
   'Fire/Safety': '🔥',
   Elevation: '▭',
+  Site: '🌳',
 }
 
 function CategorySection({ category }: { category: BloxCategory }) {

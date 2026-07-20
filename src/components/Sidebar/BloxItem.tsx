@@ -612,6 +612,51 @@ function BloxThumbnail({ bloxId }: { bloxId: string }) {
         <rect x={4} y={10} width={32} height={20} fill="none" stroke="#111" strokeWidth={1.5}/>
       </svg>
     ),
+    'site-tree': (
+      <svg width={s} height={s} viewBox="0 0 40 40">
+        <circle cx={20} cy={20} r={16} fill="none" stroke="#111" strokeWidth={1}/>
+        {[0,1,2,3,4,5,6,7].map(i=>{
+          const a = (i/8)*Math.PI*2 + 0.3
+          const len = [15,11,14,10,15,12,13,10][i]
+          return <line key={i} x1={20+Math.cos(a)*2} y1={20+Math.sin(a)*2} x2={20+Math.cos(a)*len} y2={20+Math.sin(a)*len} stroke="#111" strokeWidth={0.7}/>
+        })}
+        <circle cx={20} cy={20} r={1.5} fill="#111"/>
+      </svg>
+    ),
+    'site-shrub': (
+      <svg width={s} height={s} viewBox="0 0 40 40">
+        <path d="M20,5 Q27,2 31,9 Q38,11 35,19 Q39,26 32,30 Q30,38 21,35 Q13,39 9,31 Q1,28 5,20 Q2,12 10,10 Q13,2 20,5Z" fill="none" stroke="#111" strokeWidth={1}/>
+      </svg>
+    ),
+    'site-parking-stall': (
+      <svg width={s} height={s} viewBox="0 0 40 40">
+        <rect x={4} y={4} width={32} height={32} fill="none" stroke="#111" strokeWidth={1.2}/>
+        <line x1={15} y1={4} x2={15} y2={36} stroke="#111" strokeWidth={1}/>
+        <line x1={26} y1={4} x2={26} y2={36} stroke="#111" strokeWidth={1}/>
+      </svg>
+    ),
+    'site-property-line': (
+      <svg width={s} height={s} viewBox="0 0 40 40">
+        <text x={20} y={16} fontSize={8} textAnchor="middle" fill="#111" fontFamily="sans-serif">PL</text>
+        <line x1={2} y1={24} x2={38} y2={24} stroke="#111" strokeWidth={1.4} strokeDasharray="9 3 2 3"/>
+      </svg>
+    ),
+    'site-sidewalk': (
+      <svg width={s} height={s} viewBox="0 0 40 40">
+        <rect x={3} y={12} width={34} height={16} fill="none" stroke="#111" strokeWidth={0.8}/>
+        <line x1={14} y1={12} x2={14} y2={28} stroke="#999" strokeWidth={0.7}/>
+        <line x1={26} y1={12} x2={26} y2={28} stroke="#999" strokeWidth={0.7}/>
+        {[[7,16],[10,24],[18,15],[21,25],[30,17],[33,23],[8,21],[29,26]].map(([x,y],i)=>
+          <rect key={i} x={x} y={y} width={1} height={1} fill="#AAA"/>)}
+      </svg>
+    ),
+    'site-contour': (
+      <svg width={s} height={s} viewBox="0 0 40 40">
+        <path d="M2,22 Q8,12 14,20" fill="none" stroke="#111" strokeWidth={0.8}/>
+        <path d="M26,20 Q32,28 38,18" fill="none" stroke="#111" strokeWidth={0.8}/>
+        <text x={20} y={23} fontSize={7} textAnchor="middle" fill="#111" fontFamily="sans-serif">100</text>
+      </svg>
+    ),
     'shape-rect': (
       <svg width={s} height={s} viewBox="0 0 40 40">
         <rect x={4} y={8} width={32} height={24} fill="rgba(255,255,255,0.6)" stroke="#111" strokeWidth={1}/>
