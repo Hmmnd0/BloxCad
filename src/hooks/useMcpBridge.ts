@@ -239,8 +239,9 @@ async function handleMcpAction(action: string, payload: Record<string, unknown>)
         relativeToId?: string; relativeAnchor?: string; properties?: Record<string, unknown>
       }
       const def = BLOX_DEFINITIONS.find(d => d.id === bloxId)
-      const w = width ?? def?.defaultWidth ?? 2
-      const h = height ?? def?.defaultHeight ?? 2
+      if (!def) return { error: `Unknown blox id: "${bloxId}". Use list_blox to see valid ids.` }
+      const w = width ?? def.defaultWidth
+      const h = height ?? def.defaultHeight
       const isElevation = (store.project?.mode ?? 'floorplan') === 'elevation'
 
       // Resolve base position: relative to another element's anchor, or absolute
@@ -476,9 +477,14 @@ async function handleMcpAction(action: string, payload: Record<string, unknown>)
 
       const resolved: Array<{ id: string; bloxId: string; x: number; y: number; width?: number; height?: number; rotation?: number }> = []
       const resolvedProps = new Map<string, Record<string, unknown>>()
+      const skipped: Array<{ index: number; bloxId: string; reason: string }> = []
 
-      for (const p of placements) {
-        if (!defMap.has(p.bloxId)) continue
+      for (let i = 0; i < placements.length; i++) {
+        const p = placements[i]
+        if (!defMap.has(p.bloxId)) {
+          skipped.push({ index: i, bloxId: p.bloxId, reason: `Unknown blox id — use list_blox to see valid ids.` })
+          continue
+        }
         const def = defMap.get(p.bloxId)!
         const elemId = uuid()
 
@@ -536,7 +542,12 @@ async function handleMcpAction(action: string, payload: Record<string, unknown>)
       const allEls = getActiveElements(useStore.getState())
       const placedIds = new Set(resolved.map(r => r.id))
       const placedEls = allEls.filter(e => placedIds.has(e.id))
-      return { success: true, count: resolved.length, elements: placedEls.map(e => elementSummary(e, batchMode)) }
+      return {
+        success: true,
+        count: resolved.length,
+        elements: placedEls.map(e => elementSummary(e, batchMode)),
+        ...(skipped.length > 0 ? { skipped } : {}),
+      }
     }
 
     case 'get_viewport': {
