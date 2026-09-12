@@ -20,14 +20,14 @@ export function ClaudeSetupDialog({ onDismiss }: Props) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-      <div className="bg-gray-900 border border-gray-700 rounded-xl shadow-2xl w-[480px] p-8 flex flex-col gap-6">
+    <div className="project-dialog-backdrop fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+      <div role="dialog" aria-modal="true" aria-labelledby="connect-claude-title" className="connection-dialog bg-gray-900 border border-gray-700 rounded-xl shadow-2xl w-[480px] p-8 flex flex-col gap-6">
 
         {/* Header */}
         <div className="flex flex-col gap-2">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-lg bg-orange-500/20 flex items-center justify-center text-xl">✦</div>
-            <h2 className="text-white text-lg font-semibold">Connect Claude to bloxCAD</h2>
+            <h2 id="connect-claude-title" className="text-white text-lg font-semibold">Connect Claude to bloxCAD</h2>
           </div>
           <p className="text-gray-400 text-sm leading-relaxed">
             bloxCAD works with Claude Desktop so you can design floor plans and elevations using natural language — just describe what you want and Claude places it on the canvas.

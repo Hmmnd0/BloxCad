@@ -43,7 +43,7 @@ export function TitleBlock() {
 
   return (
     <div
-      className="shrink-0 border-t-2 border-gray-700 bg-white no-print"
+      className="sheet-metadata shrink-0 border-t-2 border-gray-700 bg-white no-print"
       style={{ fontFamily: 'inherit' }}
     >
       <div className="flex h-16 border border-gray-400">

@@ -10,9 +10,10 @@ interface PreviewLayerProps {
   pixelsPerFoot: number
   widthOverride?: number
   heightOverride?: number
+  rotation?: number
 }
 
-export function PreviewLayer({ bloxId, xFeet, yFeet, pixelsPerFoot, widthOverride, heightOverride }: PreviewLayerProps) {
+export function PreviewLayer({ bloxId, xFeet, yFeet, pixelsPerFoot, widthOverride, heightOverride, rotation = 0 }: PreviewLayerProps) {
   const def = getBloxById(bloxId)
   const Renderer = RENDERERS[bloxId]
   if (!def || !Renderer) return null
@@ -24,8 +25,8 @@ export function PreviewLayer({ bloxId, xFeet, yFeet, pixelsPerFoot, widthOverrid
 
   return (
     <Layer listening={false}>
-      <Group x={x} y={y} opacity={0.55}>
-        <Renderer widthPx={w} heightPx={h} selected={false} properties={{}} />
+      <Group x={x + w / 2} y={y + h / 2} offsetX={w / 2} offsetY={h / 2} rotation={rotation} opacity={0.55}>
+        <Renderer widthPx={w} heightPx={h} pixelsPerFoot={pixelsPerFoot} selected={false} properties={{}} />
       </Group>
     </Layer>
   )

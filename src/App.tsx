@@ -7,9 +7,11 @@ import { PropertiesPanel } from './components/Properties/PropertiesPanel'
 import { NewProjectDialog } from './components/Dialogs/NewProjectDialog'
 import { ClaudeSetupDialog } from './components/Dialogs/ClaudeSetupDialog'
 import { DRCPanel } from './components/DRCPanel/DRCPanel'
+import { CodeReferencePanel } from './components/CodeReferencePanel/CodeReferencePanel'
 import { TitleBlock } from './components/TitleBlock/TitleBlock'
 import { useStore } from './store/useStore'
 import { useMcpBridge } from './hooks/useMcpBridge'
+import { Blocks, ChevronRight, PanelRight, ScanLine } from 'lucide-react'
 
 const AUTOSAVE_KEY = 'bloxcad_autosave'
 const CLAUDE_SETUP_DISMISSED_KEY = 'bloxcad_claude_setup_dismissed'
@@ -27,8 +29,9 @@ try {
 } catch {}
 
 export default function App() {
-  const { project, showNewProjectDialog, showDRCPanel, showTitleBlock } = useStore()
+  const { project, showNewProjectDialog, showDRCPanel, showCodeRefPanel, showTitleBlock } = useStore()
   const [showClaudeSetup, setShowClaudeSetup] = useState(false)
+  const isDirty = useStore(s => s.isDirty)
   useMcpBridge()
 
   // Show Claude setup dialog on first launch if not configured
@@ -76,7 +79,13 @@ export default function App() {
   }, [])
 
   return (
-    <div className="flex flex-col h-screen bg-gray-900 text-white overflow-hidden">
+    <div className="cad-workspace flex flex-col h-screen bg-gray-900 text-white overflow-hidden">
+      <header className="workspace-header drag-region">
+        <div className="workspace-brand"><Blocks size={23} strokeWidth={1.7} /><span>blox<span>CAD</span></span></div>
+        <span className="header-divider" />
+        <div className="workspace-breadcrumb"><span>Workspace</span><ChevronRight size={13} /><strong>{project?.name ?? 'New project'}</strong></div>
+        <div className="workspace-status"><span className={isDirty ? 'status-dot pending' : 'status-dot'} />{isDirty ? 'Unsaved changes' : 'Ready'}</div>
+      </header>
       <Toolbar onOpenClaudeSetup={() => setShowClaudeSetup(true)} />
 
       <div className="flex flex-1 overflow-hidden">
@@ -86,6 +95,7 @@ export default function App() {
             <DrawingCanvas />
             <BloxSidebar />
             {showDRCPanel && <DRCPanel />}
+            {showCodeRefPanel && <CodeReferencePanel />}
           </>
         ) : (
           <div className="flex-1 flex items-center justify-center text-gray-600 text-sm">
@@ -95,7 +105,7 @@ export default function App() {
       </div>
 
       {project && showTitleBlock && <TitleBlock />}
-      {project && <PropertiesPanel />}
+      {project && <section className="properties-dock" aria-label="Selection properties"><div className="properties-heading"><ScanLine size={14} /> Inspector <span>Selection properties</span><PanelRight size={14} /></div><PropertiesPanel /></section>}
 
       {showNewProjectDialog && <NewProjectDialog />}
       {showClaudeSetup && (

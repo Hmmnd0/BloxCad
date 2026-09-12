@@ -1,0 +1,37 @@
+import {chromium} from '/Users/joe/.npm/_npx/e41f203b7505f1fb/node_modules/playwright/index.mjs'
+const browser=await chromium.launch({headless:true,executablePath:'/Users/joe/Library/Caches/ms-playwright/chromium-1234/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing'})
+try {
+  const page=await browser.newPage({viewport:{width:1600,height:1000}}),errors=[]
+  page.on('pageerror',e=>errors.push(e.message))
+  await page.goto(process.env.BLOX_PREVIEW_URL??'http://127.0.0.1:5217')
+  await page.getByRole('button',{name:'Create Project',exact:true}).waitFor()
+  await page.evaluate(async()=>{
+    const {useStore}=await import('/src/store/useStore.ts')
+    useStore.getState().createProject('Length input check','quarter')
+  })
+  await page.getByLabel('Selection properties',{exact:true}).waitFor()
+  await page.evaluate(async()=>{
+    const {useStore}=await import('/src/store/useStore.ts')
+    useStore.getState().placeElement('wall-exterior',4,4,.5,9)
+  })
+  const height=page.getByRole('textbox',{name:'Height',exact:true})
+  await page.getByLabel('Selection properties',{exact:true}).screenshot({path:'artifacts/length-input-inspector.png'})
+  await height.fill('')
+  await height.pressSequentially(`9'8"`)
+  if(await height.inputValue()!==`9'8"`)throw Error('Typing was reformatted')
+  const stored=()=>page.evaluate(async()=>{const {useStore}=await import('/src/store/useStore.ts');return useStore.getState().project.elements[0].height})
+  if(await stored()!==9)throw Error('Applied prematurely')
+  await height.press('Enter')
+  if(Math.abs(await stored()-(9+8/12))>1e-10)throw Error('Wrong length')
+  await height.fill('bad');await height.press('Tab')
+  if(await height.getAttribute('aria-invalid')!=='true')throw Error('Invalid entry not flagged')
+  if(Math.abs(await stored()-(9+8/12))>1e-10)throw Error('Invalid entry changed wall')
+  await height.focus();await height.press('Escape')
+  await page.evaluate(async()=>{const {useStore}=await import('/src/store/useStore.ts');useStore.getState().undo()})
+  if(await stored()!==9)throw Error('Undo failed')
+  await page.evaluate(async()=>{const {useStore}=await import('/src/store/useStore.ts');const s=useStore.getState();s.selectElement(s.project.elements[0].id)})
+  await height.fill('116"');await height.press('Tab')
+  if(Math.abs(await stored()-(9+8/12))>1e-10)throw Error('Blur failed')
+  if(errors.length)throw Error(errors.join('\n'))
+  console.log(JSON.stringify({typing:true,enter:true,blur:true,invalid:true,undo:true,errors}))
+} finally {await browser.close()}

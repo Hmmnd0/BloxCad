@@ -1,7 +1,12 @@
 import { create } from 'zustand'
+import {coordinateOpeningTags,updateOpeningTag} from '../utils/openingTags'
 import { v4 as uuid } from 'uuid'
 import { Project, PlacedElement, DimensionLine, Scale, Tool, WallType, DrawingMode, SCALES, TitleBlock, ChecklistItem, Layer, ElementGroup, Underlay, UnderlayCalibration, ArcWall } from '../types'
-import { getBloxById } from '../blox/definitions'
+import { getBloxById, WALL_BLOX_IDS } from '../blox/definitions'
+import { getWallTrim } from '../utils/wallGraph'
+import { attachDimension, resolveDimensions, wallOverallDimension } from '../utils/dimensionAnchors'
+import { hostOpening, reconcileOpenings } from '../utils/hostedOpenings'
+import { moveWallJunction, WallEnd, WallPoint } from '../utils/wallJunctions'
 
 const LAYER_COLORS = ['#4F9EFF', '#2ECC71', '#E74C3C', '#F1C40F', '#9B59B6', '#E67E22', '#1ABC9C', '#95A5A6']
 const DEFAULT_LAYER_ID = 'layer-default'
@@ -12,8 +17,6 @@ function makeDefaultLayer(): Layer {
 
 const MAX_HISTORY = 50
 const MIN_WALL_SEGMENT = 0.1 // feet — shorter remnants are dropped
-
-const WALL_BLOX_IDS = new Set(['wall-exterior', 'wall-interior', 'wall-cmu', 'wall-glazing', 'wall-fire-1hr', 'wall-fire-2hr'])
 
 function splitWall(wall: PlacedElement, opening: PlacedElement): PlacedElement[] {
   const segs: PlacedElement[] = []
@@ -70,11 +73,13 @@ interface AppState {
   selectedDimIds: string[]
   showNewProjectDialog: boolean
   showDRCPanel: boolean
+  showCodeRefPanel: boolean
   showTitleBlock: boolean
   showLegend: boolean
   showUnderlayPanel: boolean
   underlayCalibrationMode: 'none' | 'two-point-picking'
   underlayCalibrationPoints: { x: number; y: number }[]
+  underlayCalibrationReferenceFt: number | null
   stageX: number
   stageY: number
   stageScale: number
@@ -93,6 +98,8 @@ interface AppState {
   loadProject: (project: Project, savedStageX?: number, savedStageY?: number, savedStageScale?: number) => void
   placeElement: (bloxId: string, xFeet: number, yFeet: number, widthOverride?: number, heightOverride?: number, snapWallId?: string, initialRotation?: number) => void
   updateElement: (id: string, updates: Partial<PlacedElement>) => void
+  moveElements: (moves: { id: string; x: number; y: number }[]) => void
+  moveWallCorner: (id: string, end: WallEnd, target: WallPoint) => string | null
   deleteSelectedElements: () => void
   selectElement: (id: string, addToSelection?: boolean) => void
   clearSelection: () => void
@@ -111,10 +118,14 @@ interface AppState {
   setUnderlayVisible: (visible: boolean) => void
   setUnderlayCalibration: (cal: UnderlayCalibration | null) => void
   setUnderlayDescription: (description: string) => void
-  startUnderlayCalibration: () => void
+  setElevationDatum: (name: string, elevationFt: number) => void
+  startUnderlayCalibration: (referenceFt?: number) => void
   addUnderlayCalibrationPoint: (pt: { x: number; y: number }) => void
   cancelUnderlayCalibration: () => void
   updateTitleBlock: (updates: Partial<TitleBlock>) => void
+  updatePermitData: (data: NonNullable<Project['permitData']>) => void
+  setZoningSetback: (which: 'front' | 'side' | 'rear', ft: number) => void
+  setShowCodeRefPanel: (show: boolean) => void
   setPendingBloxWidth: (w: number | null) => void
   autoDimSelected: (direction: 'up' | 'down' | 'left' | 'right') => void
   rotateSelected: (degrees: number) => void
@@ -144,7 +155,7 @@ interface AppState {
   setSnapModule: (ft: number | null) => void
   mirrorSelected: (axis: 'h' | 'v') => void
   placePolygon: (verts: { x: number; y: number }[]) => void
-  batchPlaceElements: (placements: Array<{ id: string; bloxId: string; x: number; y: number; width?: number; height?: number; rotation?: number }>) => void
+  batchPlaceElements: (placements: Array<{ id: string; bloxId: string; x: number; y: number; width?: number; height?: number; rotation?: number; properties?: Record<string, unknown> }>) => void
   groupSelected: () => void
   ungroupSelected: () => void
   enterGroup: (groupId: string) => void
@@ -173,8 +184,10 @@ function getElements(project: Project): PlacedElement[] {
   return project.mode === 'detail' ? (project.detailElements ?? []) : project.elements
 }
 function setElements(project: Project, els: PlacedElement[]): Project {
+  els=coordinateOpeningTags(els)
   if (project.mode === 'detail') return { ...project, detailElements: els }
-  return { ...project, elements: els }
+  const elements = reconcileOpenings(project.elements, els)
+  return { ...project, elements, dimensions: resolveDimensions(project.dimensions.map(d=>attachDimension(d,project.elements)),elements) }
 }
 function getDims(project: Project): DimensionLine[] {
   return project.mode === 'detail' ? (project.detailDimensions ?? []) : project.dimensions
@@ -193,11 +206,13 @@ export const useStore = create<AppState>((set, get) => ({
   selectedDimIds: [],
   showNewProjectDialog: true,
   showDRCPanel: false,
+  showCodeRefPanel: false,
   showTitleBlock: false,
-  showLegend: false,
+  showLegend: true,
   showUnderlayPanel: false,
   underlayCalibrationMode: 'none',
   underlayCalibrationPoints: [],
+  underlayCalibrationReferenceFt: null,
   stageX: 60,
   stageY: 60,
   stageScale: 1,
@@ -221,7 +236,7 @@ export const useStore = create<AppState>((set, get) => ({
   setDrawingMode: (mode) => {
     const { project, activeTool } = get()
     if (!project) return
-    const wallTools = new Set(['wall', 'diagonal-wall', 'arc-wall'])
+    const wallTools = new Set(['wall', 'diagonal-wall', 'arc-wall', 'conduit', 'circuit-wire'])
     const tool = (mode === 'elevation' || mode === 'detail') && wallTools.has(activeTool) ? 'select' : activeTool
     set({ project: { ...project, mode }, activeTool: tool, isDirty: true })
   },
@@ -258,7 +273,7 @@ export const useStore = create<AppState>((set, get) => ({
     if (bloxId === 'window-multi') {
       autoProps.paneCount = Math.max(1, Math.min(12, Math.round(w / 2)))
     }
-    const element: PlacedElement = {
+    let element: PlacedElement = {
       id: uuid(), bloxId, x: xFeet, y: yFeet,
       width: w, height: h,
       rotation: initialRotation, properties: autoProps, locked: false,
@@ -268,8 +283,8 @@ export const useStore = create<AppState>((set, get) => ({
     if (snapWallId && project.mode !== 'detail') {
       const wall = elements.find(el => el.id === snapWallId)
       if (wall) {
-        const segs = splitWall(wall, element)
-        elements = [...elements.filter(el => el.id !== snapWallId), ...segs]
+        if (wall.locked || project.layers?.some(l => l.id === wall.layerId && l.locked)) return
+        element = hostOpening(element, wall)
       }
     }
     set({
@@ -282,11 +297,45 @@ export const useStore = create<AppState>((set, get) => ({
     })
   },
 
+  moveWallCorner: (id, end, target) => {
+    const { project, past } = get()
+    if (!project || project.mode === 'detail') return 'Corner editing is available in plan view.'
+    try {
+      const elements = moveWallJunction(project.elements, project.layers ?? [], id, end, target)
+      if (elements === project.elements) return null
+      set({ project: { ...project, elements, dimensions:resolveDimensions(project.dimensions,elements) }, past: pushToHistory(past, project), future: [], isDirty: true })
+      return null
+    } catch (error) {
+      return error instanceof Error ? error.message : 'Unable to move this corner.'
+    }
+  },
+
+  moveElements: (moves) => {
+    const { project, past } = get()
+    if (!project) return
+    const elements = getElements(project)
+    const locked = (el: PlacedElement) => el.locked || project.layers?.some(l => l.id === el.layerId && l.locked)
+    const updates = new Map(moves.map(move => [move.id, move]))
+    const next = elements.map(el => {
+      const move = updates.get(el.id)
+      const host = el.wallHost && elements.find(w => w.id === el.wallHost?.wallId)
+      if (!move || locked(el) || (host && locked(host))) return el
+      return { ...el, x: move.x, y: move.y }
+    })
+    if (next.every((el, i) => el === elements[i])) return
+    set({ project: setElements(project, next), past: pushToHistory(past, project), future: [], isDirty: true })
+  },
+
   updateElement: (id, updates) => {
     const { project, past } = get()
     if (!project) return
+    const current = getElements(project).find(el => el.id === id)
+    if (!current) return
+    const host = current.wallHost && getElements(project).find(el => el.id === current.wallHost?.wallId)
+    if (project.layers?.some(l => l.locked && (l.id === current.layerId || l.id === host?.layerId))) return
+    if (host?.locked || (current.locked && updates.locked !== false)) return
     set({
-      project: setElements(project, getElements(project).map(el => el.id === id ? { ...el, ...updates } : el)),
+      project: setElements(project, updateOpeningTag(getElements(project),id,updates,el=>el.locked||!!project.layers?.some(l=>l.id===el.layerId&&l.locked))),
       past: pushToHistory(past, project),
       future: [],
       isDirty: true
@@ -296,7 +345,8 @@ export const useStore = create<AppState>((set, get) => ({
   deleteSelectedElements: () => {
     const { project, selectedElementIds, past } = get()
     if (!project || selectedElementIds.length === 0) return
-    const remaining = getElements(project).filter(el => !selectedElementIds.includes(el.id))
+    const remaining = getElements(project).filter(el => !selectedElementIds.includes(el.id) ||
+      el.locked || project.layers?.some(l => l.id === el.layerId && l.locked))
     const usedGroupIds = new Set(remaining.map(el => el.groupId).filter(Boolean) as string[])
     const newProject: Project = {
       ...setElements(project, remaining),
@@ -332,7 +382,7 @@ export const useStore = create<AppState>((set, get) => ({
   addDimension: (dim) => {
     const { project, past } = get()
     if (!project) return
-    const full: DimensionLine = { ...dim, id: uuid() }
+    const full: DimensionLine = project.mode==='detail'?{...dim,id:uuid()}:attachDimension({...dim,id:uuid()},getElements(project).filter(e=>!project.layers?.some(l=>l.id===e.layerId&&!l.visible)))
     set({
       project: setDims(project, [...getDims(project), full]),
       selectedDimIds: [full.id],
@@ -386,6 +436,7 @@ export const useStore = create<AppState>((set, get) => ({
   setStageTransform: (x, y, scale) => set({ stageX: x, stageY: y, stageScale: scale }),
   setShowNewProjectDialog: (show) => set({ showNewProjectDialog: show }),
   setShowDRCPanel: (show) => set({ showDRCPanel: show }),
+  setShowCodeRefPanel: (show) => set({ showCodeRefPanel: show }),
   setShowTitleBlock: (show) => set({ showTitleBlock: show }),
   setShowLegend: (show) => set({ showLegend: show }),
   setShowUnderlayPanel: (show) => set({ showUnderlayPanel: show }),
@@ -421,9 +472,22 @@ export const useStore = create<AppState>((set, get) => ({
     if (!project?.underlay) return
     set({ project: { ...project, underlay: { ...project.underlay, description } }, isDirty: true })
   },
-  startUnderlayCalibration: () => set({ underlayCalibrationMode: 'two-point-picking', underlayCalibrationPoints: [] }),
-  addUnderlayCalibrationPoint: (pt) => set(s => ({ underlayCalibrationPoints: [...s.underlayCalibrationPoints, pt] })),
-  cancelUnderlayCalibration: () => set({ underlayCalibrationMode: 'none', underlayCalibrationPoints: [] }),
+  setElevationDatum: (name, elevationFt) => {
+    const {project}=get(); if(!project||!name.trim()||!Number.isFinite(elevationFt)) return
+    set({project:{...project,elevationDatums:{...(project.elevationDatums??{}),[name.trim()]:elevationFt}},isDirty:true})
+  },
+  startUnderlayCalibration: (referenceFt) => set({ underlayCalibrationMode: 'two-point-picking', underlayCalibrationPoints: [], underlayCalibrationReferenceFt: referenceFt ?? null }),
+  addUnderlayCalibrationPoint: (pt) => {
+    const s = get()
+    const points = [...s.underlayCalibrationPoints, pt]
+    if (points.length >= 2 && s.underlayCalibrationReferenceFt && s.project?.underlay) {
+      set({
+        project: { ...s.project, underlay: { ...s.project.underlay, calibration: { method: 'two-point', p1px: points[0], p2px: points[1], realDistFt: s.underlayCalibrationReferenceFt } } },
+        underlayCalibrationMode: 'none', underlayCalibrationPoints: [], underlayCalibrationReferenceFt: null, isDirty: true
+      })
+    } else set({ underlayCalibrationPoints: points })
+  },
+  cancelUnderlayCalibration: () => set({ underlayCalibrationMode: 'none', underlayCalibrationPoints: [], underlayCalibrationReferenceFt: null }),
 
   updateTitleBlock: (updates) => {
     const { project } = get()
@@ -434,17 +498,57 @@ export const useStore = create<AppState>((set, get) => ({
     }
     set({ project: { ...project, titleBlock: { ...existing, ...updates } }, isDirty: true })
   },
+  updatePermitData: (permitData) => {
+    const {project,past}=get()
+    if(!project)return
+    set({project:{...project,permitData},past:pushToHistory(past,project),future:[],isDirty:true})
+  },
+
+  setZoningSetback: (which, ft) => {
+    const { project } = get()
+    if (!project) return
+    const current = project.zoningSetbacks ?? {
+      front: project.zoningSetbackFt ?? 10,
+      side: project.zoningSetbackFt ?? 10,
+      rear: project.zoningSetbackFt ?? 10,
+    }
+    set({ project: { ...project, zoningSetbacks: { ...current, [which]: ft } }, isDirty: true })
+  },
 
   autoDimSelected: (direction) => {
     const { project, selectedElementIds, past } = get()
-    if (!project || selectedElementIds.length !== 1) return
+    if (!project || !selectedElementIds.length) return
+    const overall=project.mode!=='detail'?wallOverallDimension(getElements(project).filter(e=>!project.layers?.some(l=>l.id===e.layerId&&!l.visible)),selectedElementIds,direction):undefined
+    if(overall) {
+      const dim={...overall,id:uuid()}
+      set({project:setDims(project,[...getDims(project),dim]),past:pushToHistory(past,project),future:[],isDirty:true})
+      return
+    }
+    if(selectedElementIds.length!==1) return
     const el = getElements(project).find(e => e.id === selectedElementIds[0])
     if (!el) return
+
+    // Walls are stored extended by half their own thickness past both ends
+    // unconditionally (so corners overlap correctly) — trim that back off
+    // before dimensioning so a wall drawn as 20'-0" calls out as 20'-0", not
+    // 20'-6". Only the wall's LENGTH axis is affected; its thickness axis
+    // (the short dimension) was never part of the corner overlap.
+    let x = el.x, y = el.y, w = el.width, h = el.height
+    if (WALL_BLOX_IDS.has(el.bloxId)) {
+      const isHoriz = el.width >= el.height
+      const lengthAxisSelected = isHoriz ? (direction === 'up' || direction === 'down') : (direction === 'left' || direction === 'right')
+      if (lengthAxisSelected) {
+        const { startTrim, endTrim } = getWallTrim(el)
+        if (isHoriz) { x += startTrim; w -= startTrim + endTrim }
+        else { y += startTrim; h -= startTrim + endTrim }
+      }
+    }
+
     let dim: DimensionLine | null = null
-    if (direction === 'up')    dim = { id: uuid(), x1: el.x, y1: el.y, x2: el.x + el.width, y2: el.y, offset: 1.5 }
-    if (direction === 'down')  dim = { id: uuid(), x1: el.x, y1: el.y + el.height, x2: el.x + el.width, y2: el.y + el.height, offset: -1.5 }
-    if (direction === 'left')  dim = { id: uuid(), x1: el.x, y1: el.y, x2: el.x, y2: el.y + el.height, offset: 1.5 }
-    if (direction === 'right') dim = { id: uuid(), x1: el.x + el.width, y1: el.y, x2: el.x + el.width, y2: el.y + el.height, offset: -1.5 }
+    if (direction === 'up')    dim = { id: uuid(), x1: x, y1: y, x2: x + w, y2: y, offset: 1.5 }
+    if (direction === 'down')  dim = { id: uuid(), x1: x, y1: y + h, x2: x + w, y2: y + h, offset: -1.5 }
+    if (direction === 'left')  dim = { id: uuid(), x1: x, y1: y, x2: x, y2: y + h, offset: 1.5 }
+    if (direction === 'right') dim = { id: uuid(), x1: x + w, y1: y, x2: x + w, y2: y + h, offset: -1.5 }
     if (!dim) return
     set({
       project: setDims(project, [...getDims(project), dim]),
@@ -627,13 +731,19 @@ export const useStore = create<AppState>((set, get) => ({
     const PASTE_OFFSET = 1
     // Remap groupIds so pasted groups get fresh IDs
     const groupIdMap = new Map<string, string>()
+    const elementIdMap = new Map(clipboard.elements.map(el => [el.id, uuid()]))
     const newElements = clipboard.elements.map(el => {
       let newGroupId = el.groupId
       if (el.groupId) {
         if (!groupIdMap.has(el.groupId)) groupIdMap.set(el.groupId, uuid())
         newGroupId = groupIdMap.get(el.groupId)
       }
-      return { ...el, id: uuid(), x: el.x + PASTE_OFFSET, y: el.y + PASTE_OFFSET, groupId: newGroupId }
+      const wallHost = el.wallHost && elementIdMap.has(el.wallHost.wallId)
+        ? { ...el.wallHost, wallId: elementIdMap.get(el.wallHost.wallId)! } : undefined
+      const targetId = el.properties.targetId
+      const properties = typeof targetId === 'string' && elementIdMap.has(targetId)
+        ? { ...el.properties, targetId: elementIdMap.get(targetId)! } : { ...el.properties }
+      return { ...el, properties, id: elementIdMap.get(el.id)!, x: el.x + PASTE_OFFSET, y: el.y + PASTE_OFFSET, groupId: newGroupId, wallHost }
     })
     const newDims = clipboard.dims.map(d => ({
       ...d, id: uuid(),
@@ -706,7 +816,7 @@ export const useStore = create<AppState>((set, get) => ({
     if (!project) return
     const el = getElements(project).find(e => e.id === id)
     if (!el) return
-    const copy: PlacedElement = { ...el, id: uuid(), x, y }
+    const copy: PlacedElement = { ...el, id: uuid(), x, y, wallHost: undefined }
     set({
       project: setElements(project, [...getElements(project), copy]),
       selectedElementIds: [copy.id],
@@ -730,7 +840,7 @@ export const useStore = create<AppState>((set, get) => ({
       const autoProps: Record<string, unknown> = {}
       if (p.bloxId === 'stairs-elevation') autoProps.stepCount = Math.max(3, Math.min(24, Math.round(w / (11 / 12))))
       if (p.bloxId === 'window-multi') autoProps.paneCount = Math.max(1, Math.min(12, Math.round(w / 2)))
-      newEls.push({ id: p.id, bloxId: p.bloxId, x: p.x, y: p.y, width: w, height: h, rotation: p.rotation ?? 0, properties: autoProps, locked: false, layerId: activeLayerId })
+      newEls.push({ id: p.id, bloxId: p.bloxId, x: p.x, y: p.y, width: w, height: h, rotation: p.rotation ?? 0, properties: { ...autoProps, ...(p.properties ?? {}) }, locked: false, layerId: activeLayerId })
     }
     if (newEls.length === 0) return
     set({ project: setElements(project, [...getElements(project), ...newEls]), selectedElementIds: newEls.map(e => e.id), past: pushToHistory(past, project), future: [], isDirty: true })
@@ -903,8 +1013,8 @@ export const useStore = create<AppState>((set, get) => ({
         opening.y < el.y + el.height && opening.y + opening.height > el.y
       )
       if (!wall) continue
-      const segs = splitWall(wall, opening)
-      elements = [...elements.filter(el => el.id !== wall.id), ...segs]
+      const hosted = hostOpening(opening, wall)
+      elements = elements.map(el => el.id === opening.id ? hosted : el)
       changed = true
     }
     if (!changed) return
@@ -931,7 +1041,7 @@ export const useStore = create<AppState>((set, get) => ({
         y: el.y + el.height / 2 - labelH / 2,
         width: labelW, height: labelH,
         rotation: 0,
-        properties: { label: def?.name ?? el.bloxId },
+        properties: { label: def?.name ?? el.bloxId, targetId:el.id },
         layerId: el.layerId, locked: false,
       }
     })
@@ -961,5 +1071,5 @@ export function getActiveDimensions(state: AppState): DimensionLine[] {
   if (!state.project) return []
   return state.project.mode === 'detail'
     ? (state.project.detailDimensions ?? [])
-    : state.project.dimensions
+    : resolveDimensions(state.project.dimensions,state.project.elements)
 }

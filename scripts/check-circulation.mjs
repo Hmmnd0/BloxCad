@@ -1,0 +1,77 @@
+import { chromium } from '/Users/joe/.npm/_npx/e41f203b7505f1fb/node_modules/playwright/index.mjs'
+const browser=await chromium.launch({headless:true,executablePath:'/Users/joe/Library/Caches/ms-playwright/chromium-1234/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing'})
+try {
+  const page=await browser.newPage({viewport:{width:1600,height:1050}})
+  const errors=[];page.on('pageerror',e=>errors.push(e.message))
+  await page.addInitScript(()=>{
+    // Exercise the real bridge handler, with only Electron transport stubbed.
+    window.api={onMcpAction:fn=>{window.mcpHandler=fn},mcpRespond:(id,result)=>{window.mcpResults[id]=result}}
+    window.mcpResults={}
+  })
+  await page.goto(process.env.BLOX_PREVIEW_URL??'http://127.0.0.1:5185')
+  await page.getByRole('button',{name:'Create Project',exact:true}).waitFor()
+  const ids=await page.evaluate(async()=>{
+    const {useStore}=await import('/src/store/useStore.ts')
+    const s=useStore.getState();s.createProject('Circulation · symbol review','quarter')
+    const add=(id,x,y,w,h)=>{s.placeElement(id,x,y,w,h);return useStore.getState().project.elements.at(-1).id}
+    const wall=add('wall-exterior',0,0,34,.5)
+    s.placeElement('door-double',3,0,6,.5,wall)
+    s.placeElement('window-multi',15,0,6,.5,wall)
+    const side=add('wall-interior',0,.5,.5,19)
+    s.placeElement('door-single',0,5,.5,3,side)
+    const stair=add('stairs-straight',5,7,3,10)
+    add('stairs-landing',5,4,3,3)
+    add('stairs-hatch',12,10,3,6)
+    add('fixture-ramp',19,6,5,10)
+    add('fixture-elevator',27,5,7,7)
+    s.selectElement(stair)
+    return {stair,wall}
+  })
+  const frame=()=>page.evaluate(()=>new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r))))
+  await frame()
+  await page.evaluate(async()=>{const {useStore}=await import('/src/store/useStore.ts');useStore.getState().setStageTransform(100,110,1)})
+  await page.getByLabel('Category',{exact:true}).selectOption('Stairs')
+  if(await page.locator('.blox-card').count()!==7) throw new Error('Stair library count')
+  if(await page.locator('.blox-card .blox-preview svg path').count()<20) throw new Error('Missing shared stair previews')
+  const cue=page.getByLabel('Direction cue',{exact:true})
+  if(await cue.innerText()!=='UP · up') throw new Error('Initial stair direction')
+  await page.getByLabel('Stair step count',{exact:true}).fill('16')
+  await page.getByRole('button',{name:'Flip Vertical',exact:true}).click()
+  if(await cue.innerText()!=='UP · down') throw new Error('Flip direction')
+  await page.getByLabel('Rotation',{exact:true}).fill('90')
+  if(await cue.innerText()!=='UP · left') throw new Error('Rotated direction')
+  const bridge=await page.evaluate(async ids=>{
+    await window.mcpHandler({requestId:'get',action:'get_project',payload:{}})
+    const el=window.mcpResults.get.project.elements.find(e=>e.id===ids.stair)
+    if(el.directionCue.direction!=='left'||el.directionCue.vector.x!==-1) throw new Error('MCP arrow differs from canvas')
+    const {useStore}=await import('/src/store/useStore.ts')
+    if(useStore.getState().project.elements.find(e=>e.id===ids.stair).properties.stepCount!==16) throw new Error('Step control did not persist')
+    await window.mcpHandler({requestId:'edit',action:'update_element',payload:{id:ids.stair,rotation:0}})
+    if(window.mcpResults.edit.error) throw new Error(window.mcpResults.edit.error)
+    if(window.mcpResults.edit.element.directionCue.direction!=='down') throw new Error('MCP update response direction')
+    return el.directionCue
+  },ids)
+  await page.getByRole('button',{name:'Flip Vertical',exact:true}).click()
+  await frame();await page.screenshot({path:'artifacts/workspace-stairs.png'})
+  await page.getByLabel('Category',{exact:true}).selectOption('Openings')
+  if(await page.locator('.blox-card').count()!==10) throw new Error('Opening library count')
+  if(await page.locator('.blox-card .blox-preview svg path').count()<35) throw new Error('Missing shared opening previews')
+  await frame();await page.screenshot({path:'artifacts/workspace-openings.png'})
+  await page.setViewportSize({width:1000,height:850});await frame()
+  if(await page.evaluate(()=>document.documentElement.scrollWidth>window.innerWidth)) throw new Error('Inspector overflow')
+  await page.screenshot({path:'artifacts/stairs-inspector-compact.png'})
+  const exported=await page.evaluate(async()=>{
+    const {useStore}=await import('/src/store/useStore.ts')
+    const {buildProjectSVG}=await import('/src/utils/svgExport.ts')
+    const svg=buildProjectSVG(useStore.getState().project)
+    const doc=new DOMParser().parseFromString(svg,'image/svg+xml')
+    if(doc.querySelector('parsererror')) throw new Error('Invalid SVG')
+    if(!svg.includes('>DN</text>')||!svg.includes('>UP</text>')) throw new Error('Missing SVG direction labels')
+    return svg
+  })
+  const exportPage=await browser.newPage({viewport:{width:1200,height:900}})
+  await exportPage.setContent(exported)
+  await exportPage.screenshot({path:'artifacts/circulation-export.png',fullPage:true})
+  if(errors.length) throw new Error(errors.join('\n'))
+  console.log(JSON.stringify({previews:17,stepCount:16,bridge,svg:'valid',errors}))
+} finally {await browser.close()}

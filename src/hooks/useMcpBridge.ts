@@ -1,18 +1,130 @@
 import { useEffect } from 'react'
 import { v4 as uuid } from 'uuid'
 import { useStore, getActiveElements, getActiveDimensions } from '../store/useStore'
-import { BLOX_DEFINITIONS } from '../blox/definitions'
-import { snapOpeningToWall } from '../utils/snap'
+import { dimensionLayout } from '../utils/dimensionLayout'
+import { circulationDirection } from '../utils/circulationGeometry'
+import { isMeasuredStair, stairMeasurements, reviewStraightStairs } from '../utils/stairReview'
+import { BLOX_DEFINITIONS, WALL_BLOX_IDS, OPENING_BLOX_IDS as OPENING_CATEGORY_IDS } from '../blox/definitions'
+import { snapOpeningToWall, snapElementEdges, getDoorClearanceZones, pushOutOfClearanceZones, getElementAABB } from '../utils/snap'
+import { formatFeet, formatInches } from '../utils/scale'
 import { detectRooms } from '../utils/roomDetect'
 import { buildWallGraph } from '../utils/wallGraph'
-import type { PlacedElement } from '../types'
+import type { PlacedElement, BloxDefinition } from '../types'
 
-const OPENING_BLOX_IDS = new Set([
-  'cased-opening', 'door-single', 'door-double', 'door-sliding',
-  'window-single', 'window-double', 'window-multi', 'insulation-batt'
-])
+// Openings category plus insulation-batt (a Details blox that also needs to
+// snap onto a wall's centerline for detail-mode assembly views).
+const OPENING_BLOX_IDS = new Set([...OPENING_CATEGORY_IDS, 'insulation-batt'])
 
-const WALL_BLOX_IDS = new Set(['wall-exterior', 'wall-interior', 'wall-cmu', 'wall-glazing', 'wall-fire-1hr', 'wall-fire-2hr'])
+// How close (in feet) an MCP-placed element's edge needs to be to a wall or
+// another element's edge before it magnet-snaps flush. Small on purpose —
+// this is fixing sub-foot rounding/overlap from hand-computed coordinates,
+// not doing the job of a real layout (a bigger radius would silently pull
+// deliberately-gapped elements together).
+const MCP_EDGE_SNAP_FT = 0.5
+
+// Ceiling-mounted or purely graphical blox — don't occupy floor space, so
+// they're exempt from door-swing clearance pushback and reporting. Site
+// blox (property lines, trees, walks, parking) live outside the building
+// envelope entirely — a property line is a fixed legal boundary, not
+// something that should get silently shoved sideways because its (often
+// very long, rotated) bounding box happens to overlap an interior door's
+// swing zone.
+const NON_PHYSICAL_CATEGORIES = new Set(['Annotations', 'Fire/Safety', 'Site'])
+function isPhysical(bloxId: string): boolean {
+  const category = BLOX_DEFINITIONS.find(d => d.id === bloxId)?.category
+  return !(category && NON_PHYSICAL_CATEGORIES.has(category))
+}
+
+// Single spatial-awareness pipeline shared by every code path that can move
+// a physical (non-wall, non-opening) element: place_element, batch_place,
+// and update_element. Previously each path did its own thing — worst case,
+// update_element did nothing at all — so a fix applied through one path
+// (e.g. nudging furniture off a door threshold) could silently undo what
+// another path guaranteed (e.g. sitting flush against a wall). Routing every
+// move through this one function is what keeps "flush to nearby edges" and
+// "clear of door swings" true at the same time, regardless of which tool call
+// touched the element last.
+//
+// Order of operations: snap to nearby edges first, then push clear of any
+// door swing zone that snap landed it in. If the push-out actually moved
+// it, make one attempt to re-snap from the cleared spot — accepted only if
+// that re-snap doesn't walk straight back into a zone (avoids oscillating
+// between "flush against the wall" and "clear of the door" forever).
+function snapAndClear(
+  rough: { x: number; y: number; width: number; height: number },
+  pool: PlacedElement[],
+  threshold: number
+): { x: number; y: number; blockedBy: string[] } {
+  const snapped = snapElementEdges(rough, pool, threshold)
+  const zones = getDoorClearanceZones(pool)
+  const box = { x: snapped.x, y: snapped.y, width: rough.width, height: rough.height }
+  const pushed = pushOutOfClearanceZones(box, zones)
+  if (pushed.blockedBy.length === 0) return pushed
+
+  const reSnapped = snapElementEdges({ ...box, x: pushed.x, y: pushed.y }, pool, threshold)
+  const reCheck = pushOutOfClearanceZones({ x: reSnapped.x, y: reSnapped.y, width: rough.width, height: rough.height }, zones)
+  return reCheck.blockedBy.length === 0
+    ? { x: reSnapped.x, y: reSnapped.y, blockedBy: pushed.blockedBy }
+    : pushed
+}
+
+// Shared by place_on_wall and batch_place's per-item wallId mode: computes
+// exact wall-flush position/rotation for a blox against a given wall — no
+// coordinate guessing, so it can't land the ~0.5ft edge-snap magnet just
+// misses (which is what leaves furniture floating disconnected from any
+// wall when a hand-computed x,y guess is off by more than that).
+function resolveWallFacePlacement(
+  def: BloxDefinition,
+  wall: PlacedElement,
+  opts: { face?: 'north' | 'south' | 'east' | 'west'; offsetFromStart?: number; centerAt?: number; width?: number }
+): { x: number; y: number; width?: number; height?: number; rotation: number; snapWallId?: string } {
+  const isH = wall.width >= wall.height
+  const resolvedFace = opts.face ?? (isH ? 'south' : 'east')
+  const w = opts.width ?? def.defaultWidth
+  const h = def.defaultHeight
+  const hw = w / 2
+  const hh = h / 2
+  const isFillsWall = def.placement?.fillsWallThickness === true
+
+  if (isFillsWall) {
+    if (isH) {
+      return {
+        x: wall.x + (opts.centerAt !== undefined ? opts.centerAt - hw : opts.offsetFromStart ?? (wall.width / 2 - hw)),
+        y: wall.y, width: w, height: wall.height, rotation: 0, snapWallId: wall.id
+      }
+    }
+    return {
+      x: wall.x,
+      y: wall.y + (opts.centerAt !== undefined ? opts.centerAt - hw : opts.offsetFromStart ?? (wall.height / 2 - hw)),
+      width: wall.width, height: w, rotation: 0, snapWallId: wall.id
+    }
+  }
+
+  if (isH) {
+    const cxAlong = opts.centerAt !== undefined
+      ? wall.x + opts.centerAt
+      : wall.x + (opts.offsetFromStart !== undefined ? opts.offsetFromStart + hw : wall.width / 2)
+    return resolvedFace === 'north'
+      ? { x: cxAlong - hw, y: wall.y - h, width: w, height: h, rotation: 180 }
+      : { x: cxAlong - hw, y: wall.y + wall.height, width: w, height: h, rotation: 0 }
+  }
+
+  const cyAlong = opts.centerAt !== undefined
+    ? wall.y + opts.centerAt
+    : wall.y + (opts.offsetFromStart !== undefined ? opts.offsetFromStart + hw : wall.height / 2)
+  // A 90°/270°-rotated element's true (rendered) footprint has width/height
+  // swapped (see getElementAABB) — its true depth into the room is the
+  // stored *height*, not width. The true center point is rotation-invariant
+  // (el.x + storedWidth/2, el.y + storedHeight/2), so to land the true left/
+  // right edge flush with the wall face we push the true-center out by half
+  // that swapped depth (hh) *away* from the wall, toward the room.
+  if (resolvedFace === 'west') {
+    const cx = wall.x - hh
+    return { x: cx - hw, y: cyAlong - hh, width: w, height: h, rotation: 270 }
+  }
+  const cx = wall.x + wall.width + hh
+  return { x: cx - hw, y: cyAlong - hh, width: w, height: h, rotation: 90 }
+}
 
 function getAnchorOffset(anchor: string, w: number, h: number): [number, number] {
   // Returns [dx, dy] to ADD to the anchor coordinates to get the top-left corner
@@ -51,15 +163,30 @@ type ActionResult = Record<string, unknown>
 function r(n: number) { return Math.round(n * 100) / 100 }
 
 function elementSummary(
-  el: { id: string; bloxId: string; x: number; y: number; width: number; height: number; rotation?: number },
+  el: { id: string; bloxId: string; x: number; y: number; width: number; height: number; rotation?: number; properties?: Record<string,unknown>; wallHost?: PlacedElement['wallHost'] },
   mode = 'floorplan'
 ) {
+  const directionCue=circulationDirection({...el,rotation:el.rotation??0,properties:el.properties??{}})
+  const stairDesign=isMeasuredStair(el.bloxId)?stairMeasurements({...el,properties:el.properties??{}}):undefined
+  const rotated = (el.rotation ?? 0) * Math.PI / 180
+  const ux = Math.cos(rotated), uy = Math.sin(rotated)
+  const geometry = {
+    center: { x: r(el.x + el.width / 2), y: r(el.y + el.height / 2) },
+    aabb: (() => { const b=getElementAABB(el); return { x:r(b.x), y:r(b.y), width:r(b.width), height:r(b.height) } })(),
+    endpoints: {
+      start: { x:r(el.x + el.width/2 - ux*el.width/2), y:r(el.y + el.height/2 - uy*el.width/2) },
+      end: { x:r(el.x + el.width/2 + ux*el.width/2), y:r(el.y + el.height/2 + uy*el.width/2) },
+    },
+    faces: { left:r(el.x), right:r(el.x+el.width), top:r(el.y), bottom:r(el.y+el.height) },
+  }
   if (mode === 'elevation') {
     // Return y as elevation-from-ground of bottom edge; bottom = elevation of top edge.
     const elevBot = r(ELEV_CANVAS_H - el.y - el.height)
     const elevTop = r(ELEV_CANVAS_H - el.y)
     return {
-      id: el.id, bloxId: el.bloxId,
+      id: el.id, bloxId: el.bloxId, wallHost: el.wallHost, geometry,
+      directionCue,
+      stairDesign,
       x: r(el.x), y: elevBot,
       width: r(el.width), height: r(el.height),
       rotation: el.rotation ?? 0,
@@ -70,7 +197,9 @@ function elementSummary(
     }
   }
   return {
-    id: el.id, bloxId: el.bloxId,
+    id: el.id, bloxId: el.bloxId, wallHost: el.wallHost, geometry,
+    directionCue,
+    stairDesign,
     x: r(el.x), y: r(el.y),
     width: r(el.width), height: r(el.height),
     rotation: el.rotation ?? 0,
@@ -163,7 +292,7 @@ async function handleMcpAction(action: string, payload: Record<string, unknown>)
     case 'list_blox': {
       return {
         coordinateSystem: 'All coordinates in feet. Origin (0,0) is top-left. x increases right, y increases down. IMPORTANT: The canvas is large — before placing anything call get_viewport to get the current view center, then anchor your layout there. Wall thickness: exterior=0.5ft, interior=0.375ft, CMU=0.667ft, glazing=0.375ft.',
-        smartPlacement: 'Use place_on_wall to place fixtures, openings, and furniture against walls. It auto-computes position, rotation, and wall splitting — no coordinate math needed. Signature: { bloxId, wallId, face?: "north"|"south"|"east"|"west", offsetFromStart?: ft, centerAt?: ft, width?: ft }. face defaults to "south" for H walls, "east" for V walls. Openings automatically split the wall. fit_view is now explicit — individual place actions no longer auto-fit. Use pick_point (no payload) to ask the user to click a point on the canvas — returns { x, y } in feet. Room labels: use annotation-room-tag (not room-label, which no longer exists). Set properties { roomName, roomNum } when placing — roomArea is auto-computed from wall geometry by the DRC and does not need to be set manually.',
+        smartPlacement: 'Use place_on_wall to place fixtures, openings, and furniture against walls. It auto-computes position, rotation, and wall splitting — no coordinate math needed. Signature: { bloxId, wallId, face?: "north"|"south"|"east"|"west", offsetFromStart?: ft, centerAt?: ft, width?: ft }. face defaults to "south" for H walls, "east" for V walls. Openings automatically split the wall — do not also pass a rotation for a door/window being wall-snapped, width/height alone (thin=thickness, long=span) already fully encode its orientation, an extra rotation will spin it off the wall. place_element/batch_place also auto-magnet furniture/fixtures to nearby wall and element edges (~0.5ft radius) and auto-push them clear of any door\'s swing zone (door width, both sides of the wall) — a `note` in the response means something got nudged; check get_project\'s `clearanceIssues` list to audit door-blocking after the fact, e.g. for elements placed via place_on_wall which skips this. fit_view is now explicit — individual place actions no longer auto-fit. Use pick_point (no payload) to ask the user to click a point on the canvas — returns { x, y } in feet. Room labels: use annotation-room-tag (not room-label, which no longer exists). Set properties { roomName, roomNum } when placing — roomArea is auto-computed from wall geometry by the DRC and does not need to be set manually.',
         blox: BLOX_DEFINITIONS.map(d => ({
           id: d.id,
           name: d.name,
@@ -187,18 +316,41 @@ async function handleMcpAction(action: string, payload: Record<string, unknown>)
       const { project } = store
       if (!project) return { project: null }
 
-      const WALL_IDS = new Set(['wall-exterior', 'wall-interior', 'wall-cmu'])
       const els = getActiveElements(store)
       const overlaps: Array<{ a: string; b: string }> = []
       for (let i = 0; i < els.length; i++) {
         for (let j = i + 1; j < els.length; j++) {
           const a = els[i], b = els[j]
-          if (WALL_IDS.has(a.bloxId) && WALL_IDS.has(b.bloxId)) continue
+          if (WALL_BLOX_IDS.has(a.bloxId) && WALL_BLOX_IDS.has(b.bloxId)) continue
+          // Rotation-aware: a 90°/270°-rotated element's true footprint has
+          // swapped width/height (see getElementAABB) — comparing raw
+          // stored x/width here flags false overlaps for anything rotated,
+          // e.g. a wall-mounted TV that's actually flush reads as poking
+          // through the wall because its un-rotated box is 5ft wide.
+          const aBox = getElementAABB(a), bBox = getElementAABB(b)
           if (
-            a.x < b.x + b.width && a.x + a.width > b.x &&
-            a.y < b.y + b.height && a.y + a.height > b.y
+            aBox.x < bBox.x + bBox.width && aBox.x + aBox.width > bBox.x &&
+            aBox.y < bBox.y + bBox.height && aBox.y + aBox.height > bBox.y
           ) {
             overlaps.push({ a: a.id, b: b.id })
+          }
+        }
+      }
+
+      // Doors need clear floor space to swing — a door's own bounding box is
+      // just the thin wall slot, so raw overlap checks above never catch
+      // furniture sitting in front of it. Check separately against each
+      // door's swing zone and report it as its own category, not "overlap".
+      const clearanceZones = getDoorClearanceZones(els)
+      const clearanceIssues: Array<{ elementId: string; blocksOpeningId: string }> = []
+      if (clearanceZones.length > 0) {
+        for (const el of els) {
+          if (WALL_BLOX_IDS.has(el.bloxId) || OPENING_BLOX_IDS.has(el.bloxId) || !isPhysical(el.bloxId)) continue
+          const box = getElementAABB(el)
+          for (const zone of clearanceZones) {
+            const overlapsX = box.x < zone.x + zone.width && box.x + box.width > zone.x
+            const overlapsY = box.y < zone.y + zone.height && box.y + box.height > zone.y
+            if (overlapsX && overlapsY) clearanceIssues.push({ elementId: el.id, blocksOpeningId: zone.openingId })
           }
         }
       }
@@ -217,26 +369,28 @@ async function handleMcpAction(action: string, payload: Record<string, unknown>)
             return { ...s, rotation: el.rotation, locked: el.locked }
           }),
           dimensions: getActiveDimensions(store).map(d => {
-            const len = Math.sqrt((d.x2 - d.x1) ** 2 + (d.y2 - d.y1) ** 2)
-            const ft = Math.floor(len)
-            const inches = Math.round((len - ft) * 12)
+            const len = dimensionLayout(d,1).value
             return {
               id: d.id,
               x1: d.x1, y1: d.y1, x2: d.x2, y2: d.y2, offset: d.offset,
-              lengthFt: Math.round(len * 100) / 100,
-              measureText: inches === 0 ? `${ft}'-0"` : `${ft}'-${inches}"`,
+              lengthFt: d.needsReview?null:Math.round(len * 100) / 100,
+              measurement:d.measurement, needsReview:!!d.needsReview,
+              associative:!!(d.anchor1||d.anchor2||d.overall),
+              measureText: d.needsReview?'CHECK':project.mode === 'detail' ? formatInches(len) : formatFeet(len),
             }
           }),
           overlaps,
+          stairReview: reviewStraightStairs(els),
+          ...(clearanceIssues.length > 0 ? { clearanceIssues } : {}),
           ...(rooms.length > 0 ? { rooms } : {}),
         }
       }
     }
 
     case 'place_element': {
-      const { bloxId, x, y, width, height, anchor = 'top-left', relativeToId, relativeAnchor = 'top-left', properties: customProps } = payload as {
+      const { bloxId, x, y, width, height, anchor = 'top-left', relativeToId, relativeAnchor = 'top-left', properties: customProps, rotation } = payload as {
         bloxId: string; x: number; y: number; width?: number; height?: number; anchor?: string
-        relativeToId?: string; relativeAnchor?: string; properties?: Record<string, unknown>
+        relativeToId?: string; relativeAnchor?: string; properties?: Record<string, unknown>; rotation?: number
       }
       const def = BLOX_DEFINITIONS.find(d => d.id === bloxId)
       if (!def) return { error: `Unknown blox id: "${bloxId}". Use list_blox to see valid ids.` }
@@ -286,7 +440,24 @@ async function handleMcpAction(action: string, payload: Record<string, unknown>)
         }
       }
 
-      store.placeElement(bloxId, finalX, finalY, finalW, finalH, wallId)
+      // Auto-snap everything else (furniture, fixtures, casework, annotations)
+      // to nearby wall faces and other elements' edges — same magnetism the
+      // interactive canvas drag gives you, so hand-computed MCP coordinates
+      // that are a few inches off still land flush instead of overlapping.
+      let clearanceBlockedBy: string[] = []
+      if (!OPENING_BLOX_IDS.has(bloxId) && !WALL_BLOX_IDS.has(bloxId) && isPhysical(bloxId)) {
+        const result = snapAndClear({ x: finalX, y: finalY, width: w, height: h }, getActiveElements(store), MCP_EDGE_SNAP_FT)
+        finalX = result.x
+        finalY = result.y
+        clearanceBlockedBy = result.blockedBy
+      }
+
+      // Coerce defensively rather than trust the payload's declared type — an
+      // MCP client whose cached tool schema predates this field (or a server
+      // process that hasn't reloaded it yet) can send rotation as a numeric
+      // string instead of a number.
+      const rotationNum = rotation !== undefined && rotation !== null ? Number(rotation) : undefined
+      store.placeElement(bloxId, finalX, finalY, finalW, finalH, wallId, Number.isFinite(rotationNum) ? rotationNum : undefined)
       const elements = getActiveElements(useStore.getState())
       const newEl = elements[elements.length - 1]
       if (customProps && newEl) {
@@ -296,7 +467,11 @@ async function handleMcpAction(action: string, payload: Record<string, unknown>)
       }
       const mode = useStore.getState().project?.mode ?? 'floorplan'
       const finalEl = getActiveElements(useStore.getState()).find(e => e.id === newEl?.id) ?? newEl
-      return { success: true, element: finalEl ? elementSummary(finalEl, mode) : null }
+      return {
+        success: true,
+        element: finalEl ? elementSummary(finalEl, mode) : null,
+        ...(clearanceBlockedBy.length > 0 ? { note: `Moved clear of door swing (${clearanceBlockedBy.join(', ')})` } : {})
+      }
     }
 
     case 'place_wall': {
@@ -342,69 +517,11 @@ async function handleMcpAction(action: string, payload: Record<string, unknown>)
       }
       const def = BLOX_DEFINITIONS.find(d => d.id === bloxId)
       if (!def) return { error: `Unknown blox: ${bloxId}` }
-      const wallEls = getActiveElements(store)
-      const wall = wallEls.find(e => e.id === wallId)
+      const wall = getActiveElements(store).find(e => e.id === wallId)
       if (!wall) return { error: `Wall ${wallId} not found` }
 
-      const isH = wall.width >= wall.height
-      const resolvedFace = face ?? (isH ? 'south' : 'east')
-      const w = widthOverride ?? def.defaultWidth
-      const h = def.defaultHeight
-      const hw = w / 2
-      const hh = h / 2
-      const isFillsWall = def.placement?.fillsWallThickness === true
-
-      let elX: number, elY: number
-      let elW: number | undefined, elH: number | undefined
-      let rotation = 0
-      let snapWallId: string | undefined
-
-      if (isFillsWall) {
-        snapWallId = wallId
-        if (isH) {
-          elX = wall.x + (centerAt !== undefined ? centerAt - hw : offsetFromStart ?? (wall.width / 2 - hw))
-          elY = wall.y
-          elW = w
-          elH = wall.height
-        } else {
-          elX = wall.x
-          elY = wall.y + (centerAt !== undefined ? centerAt - hw : offsetFromStart ?? (wall.height / 2 - hw))
-          elW = wall.width
-          elH = w
-        }
-      } else {
-        if (isH) {
-          const cxAlong = centerAt !== undefined
-            ? wall.x + centerAt
-            : wall.x + (offsetFromStart !== undefined ? offsetFromStart + hw : wall.width / 2)
-          if (resolvedFace === 'north') {
-            rotation = 180
-            elX = cxAlong - hw
-            elY = wall.y - h
-          } else {
-            rotation = 0
-            elX = cxAlong - hw
-            elY = wall.y + wall.height
-          }
-        } else {
-          const cyAlong = centerAt !== undefined
-            ? wall.y + centerAt
-            : wall.y + (offsetFromStart !== undefined ? offsetFromStart + hw : wall.height / 2)
-          if (resolvedFace === 'west') {
-            rotation = 270
-            const cx = wall.x + hh
-            elX = cx - hw
-            elY = cyAlong - hh
-          } else {
-            rotation = 90
-            const cx = wall.x + wall.width - hh
-            elX = cx - hw
-            elY = cyAlong - hh
-          }
-        }
-      }
-
-      store.placeElement(bloxId, elX, elY, elW, elH, snapWallId, rotation || undefined)
+      const r = resolveWallFacePlacement(def, wall, { face, offsetFromStart, centerAt, width: widthOverride })
+      store.placeElement(bloxId, r.x, r.y, r.width, r.height, r.snapWallId, r.rotation || undefined)
       const powElements = getActiveElements(useStore.getState())
       const powNewEl = powElements[powElements.length - 1]
       return { success: true, element: powNewEl ? elementSummary(powNewEl, store.project?.mode ?? 'floorplan') : null }
@@ -413,18 +530,39 @@ async function handleMcpAction(action: string, payload: Record<string, unknown>)
     case 'update_element': {
       const { id, properties: propsUpdate, ...updates } = payload as { id: string; properties?: Record<string, unknown>; [k: string]: unknown }
       const isElevation = (store.project?.mode ?? 'floorplan') === 'elevation'
+      const el = getActiveElements(store).find(e => e.id === id)
       if (isElevation && updates.y !== undefined) {
-        const el = getActiveElements(store).find(e => e.id === id)
         const h = updates.height !== undefined ? (updates.height as number) : (el?.height ?? 1)
         updates.y = ELEV_CANVAS_H - (updates.y as number) - h
       }
       // Merge properties rather than replace so auto-computed props (stepCount, etc.) are preserved
       if (propsUpdate) {
-        const el = getActiveElements(store).find(e => e.id === id)
         updates.properties = { ...(el?.properties ?? {}), ...propsUpdate }
       }
+      // A caller repositioning a physical element (e.g. nudging it clear of
+      // a door) goes through the same snap-and-clear pipeline as initial
+      // placement — otherwise fixing one spatial problem (blocking a door)
+      // routinely regresses another (no longer flush against any wall),
+      // exactly what update_element's direct, unchecked x/y write used to do.
+      let clearanceBlockedBy: string[] = []
+      if (el && (updates.x !== undefined || updates.y !== undefined) && !WALL_BLOX_IDS.has(el.bloxId) && !OPENING_BLOX_IDS.has(el.bloxId) && isPhysical(el.bloxId)) {
+        const w = (updates.width as number | undefined) ?? el.width
+        const h = (updates.height as number | undefined) ?? el.height
+        const roughX = (updates.x as number | undefined) ?? el.x
+        const roughY = (updates.y as number | undefined) ?? el.y
+        const pool = getActiveElements(store).filter(e => e.id !== id)
+        const result = snapAndClear({ x: roughX, y: roughY, width: w, height: h }, pool, MCP_EDGE_SNAP_FT)
+        updates.x = result.x
+        updates.y = result.y
+        clearanceBlockedBy = result.blockedBy
+      }
       store.updateElement(id, updates as Parameters<typeof store.updateElement>[1])
-      return { success: true }
+      const updatedElement=getActiveElements(useStore.getState()).find(e=>e.id===id)
+      return {
+        success: true,
+        element:updatedElement?elementSummary(updatedElement,store.project?.mode??'floorplan'):null,
+        ...(clearanceBlockedBy.length > 0 ? { note: `Moved clear of door swing (${clearanceBlockedBy.join(', ')})` } : {})
+      }
     }
 
     case 'delete_elements': {
@@ -435,10 +573,10 @@ async function handleMcpAction(action: string, payload: Record<string, unknown>)
     }
 
     case 'add_dimension': {
-      const { x1, y1, x2, y2, offset = -1.5 } = payload as {
-        x1: number; y1: number; x2: number; y2: number; offset?: number
+      const { x1, y1, x2, y2, offset = -1.5, measurement } = payload as {
+        x1: number; y1: number; x2: number; y2: number; offset?: number; measurement?: 'horizontal'|'vertical'|'aligned'
       }
-      store.addDimension({ x1, y1, x2, y2, offset })
+      store.addDimension({ x1, y1, x2, y2, offset, measurement })
       const dims = getActiveDimensions(useStore.getState())
       const newDim = dims[dims.length - 1]
       return { success: true, id: newDim?.id ?? null }
@@ -467,6 +605,8 @@ async function handleMcpAction(action: string, payload: Record<string, unknown>)
           bloxId: string; anchor?: string; rotation?: number
           x?: number; y?: number; width?: number; height?: number
           x1?: number; y1?: number; x2?: number; y2?: number
+          wallId?: string; face?: 'north' | 'south' | 'east' | 'west'
+          offsetFromStart?: number; centerAt?: number
           properties?: Record<string, unknown>
         }>
       }
@@ -475,9 +615,21 @@ async function handleMcpAction(action: string, payload: Record<string, unknown>)
       const batchMode = store.project?.mode ?? 'floorplan'
       const batchIsElev = batchMode === 'elevation'
 
-      const resolved: Array<{ id: string; bloxId: string; x: number; y: number; width?: number; height?: number; rotation?: number }> = []
-      const resolvedProps = new Map<string, Record<string, unknown>>()
+      type Resolved = { id: string; bloxId: string; x: number; y: number; width?: number; height?: number; rotation?: number; properties?: Record<string, unknown> }
+      const resolved: Resolved[] = []
       const skipped: Array<{ index: number; bloxId: string; reason: string }> = []
+      const notes: Array<{ id: string; note: string }> = []
+
+      // Growing pool of elements already resolved earlier in this same batch,
+      // so a door can snap to a wall placed two items above it, and a
+      // nightstand can snap flush against a bed placed just before it —
+      // without needing a round trip through the project store first.
+      const batchPool: PlacedElement[] = []
+      const toPoolElement = (r: Resolved, defW: number, defH: number): PlacedElement => ({
+        id: r.id, bloxId: r.bloxId, x: r.x, y: r.y,
+        width: r.width ?? defW, height: r.height ?? defH,
+        rotation: r.rotation ?? 0, properties: {}, locked: false
+      })
 
       for (let i = 0; i < placements.length; i++) {
         const p = placements[i]
@@ -493,45 +645,88 @@ async function handleMcpAction(action: string, payload: Record<string, unknown>)
           const t = WALL_THICKNESS[p.bloxId] ?? 0.5
           const adx = Math.abs(p.x2 - p.x1)
           const ady = Math.abs(p.y2 - p.y1)
+          let wallEntry: Resolved
           if (ady < 0.01 || adx < 0.01) {
             if (adx >= ady) {
-              resolved.push({ id: elemId, bloxId: p.bloxId, x: Math.min(p.x1, p.x2) - t / 2, y: p.y1 - t / 2, width: adx + t, height: t })
+              wallEntry = { id: elemId, bloxId: p.bloxId, x: Math.min(p.x1, p.x2) - t / 2, y: p.y1 - t / 2, width: adx + t, height: t }
             } else {
-              resolved.push({ id: elemId, bloxId: p.bloxId, x: p.x1 - t / 2, y: Math.min(p.y1, p.y2) - t / 2, width: t, height: ady + t })
+              wallEntry = { id: elemId, bloxId: p.bloxId, x: p.x1 - t / 2, y: Math.min(p.y1, p.y2) - t / 2, width: t, height: ady + t }
             }
           } else {
             const dist = Math.sqrt(adx * adx + ady * ady)
             const angleDeg = Math.atan2(p.y2 - p.y1, p.x2 - p.x1) * (180 / Math.PI)
             const cx = (p.x1 + p.x2) / 2
             const cy = (p.y1 + p.y2) / 2
-            resolved.push({ id: elemId, bloxId: p.bloxId, x: cx - dist / 2, y: cy - t / 2, width: dist, height: t, rotation: angleDeg })
+            wallEntry = { id: elemId, bloxId: p.bloxId, x: cx - dist / 2, y: cy - t / 2, width: dist, height: t, rotation: angleDeg }
           }
-          if (p.properties) resolvedProps.set(elemId, p.properties)
+          resolved.push(wallEntry)
+          batchPool.push(toPoolElement(wallEntry, t, t))
+          if (p.properties) wallEntry.properties=p.properties
           continue
         }
 
-        // Regular element with x,y,width,height
+        // Wall-attached furniture/fixture — same computation as
+        // place_on_wall, resolved against walls already placed earlier in
+        // this same batch. No coordinate guessing, so it can't come up
+        // short of flush the way a hand-computed x,y can.
+        if (p.wallId) {
+          const wallPool = [...getActiveElements(store), ...batchPool]
+          const wall = wallPool.find(e => e.id === p.wallId)
+          if (!wall) {
+            skipped.push({ index: i, bloxId: p.bloxId, reason: `Wall ${p.wallId} not found` })
+            continue
+          }
+          const r = resolveWallFacePlacement(def, wall, { face: p.face, offsetFromStart: p.offsetFromStart, centerAt: p.centerAt, width: p.width })
+          const entry: Resolved = { id: elemId, bloxId: p.bloxId, x: r.x, y: r.y, width: r.width, height: r.height, rotation: r.rotation }
+          resolved.push(entry)
+          batchPool.push(toPoolElement(entry, def.defaultWidth, def.defaultHeight))
+          if (p.properties) entry.properties=p.properties
+          continue
+        }
+
         const w = p.width ?? def.defaultWidth
         const h = p.height ?? def.defaultHeight
         const [ox, oy] = getAnchorOffset(p.anchor ?? 'top-left', w, h)
-        const elemY = batchIsElev
-          ? elevToCanvasY(p.y ?? 0, oy)
-          : (p.y ?? 0) + oy
-        resolved.push({ id: elemId, bloxId: p.bloxId, x: (p.x ?? 0) + ox, y: elemY, width: p.width, height: p.height, rotation: p.rotation })
-        if (p.properties) resolvedProps.set(elemId, p.properties)
+        const roughX = (p.x ?? 0) + ox
+        const roughY = batchIsElev ? elevToCanvasY(p.y ?? 0, oy) : (p.y ?? 0) + oy
+        const snapPool = [...getActiveElements(store), ...batchPool]
+
+        // Openings snap to the nearest wall centerline and inherit its
+        // thickness/span — same behavior place_element gives a single door.
+        // Once snapped, width/height alone fully encode orientation (thin
+        // side = wall thickness, long side = span along the wall — the same
+        // convention walls use), so any caller-supplied rotation must be
+        // dropped here or it double-rotates a vertical-wall opening right
+        // off the wall and out into the room.
+        if (OPENING_BLOX_IDS.has(p.bloxId)) {
+          const wallSnap = snapOpeningToWall({ x: roughX + w / 2, y: roughY + h / 2 }, snapPool, w, 3)
+          const entry: Resolved = wallSnap
+            ? { id: elemId, bloxId: p.bloxId, x: wallSnap.x, y: wallSnap.y, width: wallSnap.widthOverride, height: wallSnap.heightOverride, rotation: 0 }
+            : { id: elemId, bloxId: p.bloxId, x: roughX, y: roughY, width: p.width, height: p.height, rotation: p.rotation }
+          resolved.push(entry)
+          batchPool.push(toPoolElement(entry, w, h))
+          if (p.properties) entry.properties=p.properties
+          continue
+        }
+
+        // Everything else (furniture, fixtures, casework, annotations) magnet-
+        // snaps its edges to nearby walls/elements within MCP_EDGE_SNAP_FT,
+        // then gets pushed clear of any door's swing zone the snap left it in.
+        const pushed = isPhysical(p.bloxId)
+          ? snapAndClear({ x: roughX, y: roughY, width: w, height: h }, snapPool, MCP_EDGE_SNAP_FT)
+          : { ...snapElementEdges({ x: roughX, y: roughY, width: w, height: h }, snapPool, MCP_EDGE_SNAP_FT), blockedBy: [] as string[] }
+        if (pushed.blockedBy.length > 0) {
+          notes.push({ id: elemId, note: `nudged clear of door swing (${pushed.blockedBy.join(', ')})` })
+        }
+        const entry: Resolved = { id: elemId, bloxId: p.bloxId, x: pushed.x, y: pushed.y, width: p.width, height: p.height, rotation: p.rotation }
+        resolved.push(entry)
+        batchPool.push(toPoolElement(entry, w, h))
+        if (p.properties) entry.properties=p.properties
       }
 
+      // One store mutation gives the entire batch one undo step, including
+      // MCP-supplied properties; no follow-up edits can fragment the history.
       store.batchPlaceElements(resolved)
-      // Apply custom properties after batch placement
-      if (resolvedProps.size > 0) {
-        const allElsNow = getActiveElements(useStore.getState())
-        for (const [id, props] of resolvedProps) {
-          const el = allElsNow.find(e => e.id === id)
-          if (el) {
-            useStore.getState().updateElement(id, { properties: { ...el.properties, ...props } } as Parameters<typeof store.updateElement>[1])
-          }
-        }
-      }
       // Split walls for any openings that were batch-placed
       const batchOpeningIds = resolved
         .filter(r => OPENING_BLOX_IDS.has(r.bloxId))
@@ -547,7 +742,29 @@ async function handleMcpAction(action: string, payload: Record<string, unknown>)
         count: resolved.length,
         elements: placedEls.map(e => elementSummary(e, batchMode)),
         ...(skipped.length > 0 ? { skipped } : {}),
+        ...(notes.length > 0 ? { notes } : {}),
       }
+    }
+
+    case 'repeat_elements': {
+      const { sourceIds, count, stepX=0, stepY=0, rotationStep=0, properties } = payload as { sourceIds:string[]; count:number; stepX?:number; stepY?:number; rotationStep?:number; properties?:Record<string,unknown> }
+      const source=getActiveElements(store).filter(e=>sourceIds?.includes(e.id))
+      if(!source.length) return { error:'No source elements found' }
+      if(!Number.isInteger(count)||count<1||count>500) return { error:'count must be an integer from 1 to 500' }
+      if(!Number.isFinite(stepX)||!Number.isFinite(stepY)||!Number.isFinite(rotationStep)) return { error:'stepX, stepY, and rotationStep must be finite drawing-unit values' }
+      const placements=[] as Array<{bloxId:string;x:number;y:number;width:number;height:number;rotation:number;properties?:Record<string,unknown>}>
+      for(let i=1;i<=count;i++) for(const el of source) placements.push({ bloxId:el.bloxId, x:el.x+stepX*i, y:el.y+stepY*i, width:el.width, height:el.height, rotation:(el.rotation??0)+rotationStep*i, properties:{...el.properties,...properties} })
+      store.batchPlaceElements(placements.map(p=>({...p,id:uuid()})))
+      return { success:true, count:placements.length, sourceIds, step:{x:stepX,y:stepY,rotation:rotationStep}, elements:getActiveElements(useStore.getState()).slice(-placements.length).map(e=>elementSummary(e,store.project?.mode??'floorplan')) }
+    }
+
+    case 'preview_batch': {
+      const { elements:placements } = payload as { elements?:Array<{bloxId:string;x?:number;y?:number;width?:number;height?:number;rotation?:number}> }
+      if(!placements?.length) return { error:'preview_batch requires a non-empty elements array' }
+      const known=new Set(BLOX_DEFINITIONS.map(d=>d.id))
+      const invalid=placements.map((p,i)=>!known.has(p.bloxId)?{index:i,bloxId:p.bloxId,reason:'Unknown blox id'}:null).filter(Boolean)
+      const nonFinite=placements.map((p,i)=>[p.x,p.y,p.width,p.height,p.rotation].some(v=>v!==undefined&&!Number.isFinite(v))?{index:i,reason:'Non-finite coordinate or size'}:null).filter(Boolean)
+      return { valid:invalid.length===0&&nonFinite.length===0, count:placements.length, invalid, nonFinite, note:'Preview only; no elements were placed. Run batch_place after validation.' }
     }
 
     case 'get_viewport': {
@@ -638,10 +855,13 @@ async function handleMcpAction(action: string, payload: Record<string, unknown>)
       const { project } = store
       if (!project) return { error: 'No project open' }
       const activeEls = getActiveElements(store)
-      store.selectMany(activeEls.map(e => e.id), [])
+      const activeDims = getActiveDimensions(store)
+      store.selectMany(activeEls.map(e => e.id), activeDims.map(d => d.id))
       store.deleteSelectedElements()
+      store.deleteSelectedDims()
       const remaining = getActiveElements(useStore.getState())
-      return { success: true, deletedCount: activeEls.length - remaining.length }
+      const remainingDims = getActiveDimensions(useStore.getState())
+      return { success: true, deletedCount: activeEls.length - remaining.length, deletedDimCount: activeDims.length - remainingDims.length }
     }
 
     case 'lock_elements': {
@@ -704,8 +924,53 @@ async function handleMcpAction(action: string, payload: Record<string, unknown>)
         opacity: u.opacity,
         visible: u.visible,
         calibration: u.calibration,
+        registration: u.registration ?? null,
         imageUrl: u.imageData
       }
+    }
+
+    case 'calibrate_underlay': {
+      const { p1px, p2px, realDistFt } = payload as { p1px:{x:number;y:number}; p2px:{x:number;y:number}; realDistFt:number }
+      const u=store.project?.underlay
+      if(!u) return { error:'No underlay loaded' }
+      if(!p1px||!p2px||!Number.isFinite(realDistFt)||realDistFt<=0) return { error:'Provide two pixel points and a positive realDistFt' }
+      const pixelDistance=Math.hypot(p2px.x-p1px.x,p2px.y-p1px.y)
+      if(pixelDistance<1) return { error:'Calibration points must be distinct' }
+      store.setUnderlayCalibration({method:'two-point',p1px,p2px,realDistFt})
+      return { success:true, pixelDistance:r(pixelDistance), feetPerPixel:realDistFt/pixelDistance, calibration:{method:'two-point',p1px,p2px,realDistFt} }
+    }
+
+    case 'calibrate_underlay_multi': {
+      const { pairs } = payload as { pairs:Array<{p1px:{x:number;y:number};p2px:{x:number;y:number};realDistFt:number}> }
+      const u=store.project?.underlay
+      if(!u||!Array.isArray(pairs)||pairs.length<2) return {error:'Provide an underlay and at least two known dimension pairs'}
+      const scales=pairs.map(q=>Math.hypot(q.p2px.x-q.p1px.x,q.p2px.y-q.p1px.y)/q.realDistFt)
+      if(scales.some(v=>!Number.isFinite(v)||v<=0)) return {error:'Each pair must contain distinct pixel points and a positive real distance'}
+      const pixelsPerFoot=scales.reduce((a,b)=>a+b,0)/scales.length
+      const residualFt=Math.sqrt(scales.reduce((s,v)=>s+Math.pow(v/pixelsPerFoot-1,2),0)/scales.length)
+      store.setUnderlayCalibration({method:'multi-point',pairs,pixelsPerFoot,residualFt})
+      return {success:true,pixelsPerFoot:r(pixelsPerFoot),residualRatio:r(residualFt),confidence:residualFt<=.02?'high':residualFt<=.05?'medium':'low'}
+    }
+
+    case 'register_underlay': {
+      const {points}=payload as {points:Array<{px:{x:number;y:number};ft:{x:number;y:number}}>}
+      const u=store.project?.underlay
+      if(!u||!Array.isArray(points)||points.length<2) return {error:'Provide an underlay and at least two pixel-to-feet control points'}
+      const a=points[0],b=points[1],dx=b.px.x-a.px.x,dy=b.px.y-a.px.y,rx=b.ft.x-a.ft.x,ry=b.ft.y-a.ft.y
+      const lp=Math.hypot(dx,dy),lr=Math.hypot(rx,ry)
+      if(lp<1||lr<=0) return {error:'Control points must be distinct'}
+      const scaleFtPerPx=lr/lp, rotationDeg=Math.atan2(ry,rx)*180/Math.PI-Math.atan2(dy,dx)*180/Math.PI
+      const rad=rotationDeg*Math.PI/180, residuals=points.map(p=>{const x=(p.px.x-a.px.x)*scaleFtPerPx,y=(p.px.y-a.px.y)*scaleFtPerPx;const fx=a.ft.x+x*Math.cos(rad)-y*Math.sin(rad),fy=a.ft.y+x*Math.sin(rad)+y*Math.cos(rad);return Math.hypot(fx-p.ft.x,fy-p.ft.y)})
+      const residualFt=Math.sqrt(residuals.reduce((s,v)=>s+v*v,0)/residuals.length)
+      store.setUnderlay({...u,registration:{scaleFtPerPx,rotationDeg,originPx:a.px,originFt:a.ft}})
+      return {success:true,scaleFtPerPx:r(scaleFtPerPx),rotationDeg:r(rotationDeg),residualFt:r(residualFt),confidence:residualFt<=.05?'high':residualFt<=.15?'medium':'low'}
+    }
+
+    case 'set_elevation_datum': {
+      const {name,elevationFt}=payload as {name:string;elevationFt:number}
+      if(!name||!Number.isFinite(elevationFt)) return {error:'Provide a datum name and finite elevationFt'}
+      store.setElevationDatum(name,elevationFt)
+      return {success:true,name,elevationFt}
     }
 
     case 'undo': {
@@ -956,6 +1221,27 @@ async function handleMcpAction(action: string, payload: Record<string, unknown>)
 
       const passCount = results.filter(r => r.pass).length
       return { allPass: passCount === results.length, passCount, total: results.length, results }
+    }
+
+    case 'precision_audit': {
+      const project = store.project
+      if (!project) return { error: 'No project open' }
+      const els = getActiveElements(store)
+      const graph = buildWallGraph(els)
+      const unresolvedDimensions = getActiveDimensions(store).filter(d => d.needsReview).map(d => d.id)
+      const calibration = project.underlay?.calibration ?? null
+      const checks = {
+        wallGaps: graph.gaps.map(g => ({ wallId:g.wallId, end:g.end, gapFt:r(g.gapFt), nearestWallId:g.nearestWallId })),
+        unresolvedDimensions,
+        underlay: project.underlay ? { calibrated:!!calibration, method:calibration?.method ?? null } : { calibrated:true, method:null },
+        wallSummary: graph.summary,
+      }
+      const failures = [
+        ...(graph.gaps.filter(g => Number.isFinite(g.gapFt) && g.gapFt > 0.05).length ? ['wall gaps exceed 0.05ft'] : []),
+        ...(unresolvedDimensions.length ? ['associative dimensions need review'] : []),
+        ...(project.underlay && !calibration ? ['underlay is not calibrated'] : []),
+      ]
+      return { pass:failures.length===0, failures, checks, recommendation: failures.length ? 'Resolve every reported issue before stamping or claiming a 1:1 recreation.' : 'Geometry, dimensions, and calibration passed the precision audit.' }
     }
 
     case 'pick_point': {

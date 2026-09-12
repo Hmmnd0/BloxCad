@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react'
-import { useStore } from '../../store/useStore'
+import { getActiveElements, useStore } from '../../store/useStore'
 import { Underlay } from '../../types'
 
 export function UnderlayPanel() {
@@ -16,6 +16,18 @@ export function UnderlayPanel() {
   const fileRef = useRef<HTMLInputElement>(null)
   const [simpleWidth, setSimpleWidth] = useState('')
   const [twoPointDist, setTwoPointDist] = useState('')
+  const selectedElements = getActiveElements(useStore()).filter(el => useStore.getState().selectedElementIds.includes(el.id))
+  const selectedReferences = Array.from(new Set(selectedElements.flatMap(el => {
+    // Ignore wall thicknesses and other drafting-width details; references
+    // should be room/segment-scale dimensions.
+    const values = [el.width, el.height].filter(v => v >= 2)
+    return values
+  }).map(v => Math.round(v * 12) / 12))).sort((a, b) => a - b)
+
+  function feetLabel(ft: number) {
+    const inches = Math.round(ft * 12)
+    return `${Math.floor(inches / 12)}'-${inches % 12}\"`
+  }
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
@@ -64,7 +76,7 @@ export function UnderlayPanel() {
   }
 
   return (
-    <div className="flex-1 overflow-y-auto py-2 px-3 space-y-4 text-xs text-gray-300">
+    <div className="underlay-panel utility-content flex-1 overflow-y-auto py-2 px-3 space-y-4 text-xs text-gray-300">
       {/* Import */}
       <div>
         <p className="text-gray-500 text-[10px] uppercase tracking-widest mb-2">Reference Image</p>
@@ -120,7 +132,9 @@ export function UnderlayPanel() {
               <div className="mb-2 text-[10px] text-green-400 bg-green-950 rounded px-2 py-1">
                 {underlay.calibration.method === 'simple'
                   ? `Simple: ${underlay.calibration.realWidthFt}' wide`
-                  : `Two-point: ${underlay.calibration.realDistFt}' span`}
+                  : underlay.calibration.method === 'two-point'
+                  ? `Two-point: ${underlay.calibration.realDistFt}' span`
+                  : `Multi-point: ${underlay.calibration.residualFt.toFixed(2)}' residual`}
                 <button
                   onClick={() => setUnderlayCalibration(null)}
                   className="ml-2 text-gray-500 hover:text-red-400"
@@ -147,9 +161,18 @@ export function UnderlayPanel() {
 
             {/* Two-point calibration */}
             <p className="text-gray-500 mb-1">Two-point — click two known points on image:</p>
+            {selectedReferences.length > 0 && underlayCalibrationMode === 'none' && (
+              <div className="mb-2 rounded bg-blue-950/60 border border-blue-800 p-2">
+                <p className="text-[10px] text-blue-200 mb-1">Calibrate from selected blox</p>
+                <p className="text-[10px] text-gray-400 mb-1">Uses selected geometry as the known distance, then click the matching two points on the underlay.</p>
+                <div className="flex flex-wrap gap-1">
+                  {selectedReferences.map(ft => <button key={ft} onClick={() => startUnderlayCalibration(ft)} className="px-2 py-1 rounded bg-blue-700 hover:bg-blue-600 text-white text-[10px]">Use {feetLabel(ft)}</button>)}
+                </div>
+              </div>
+            )}
             {underlayCalibrationMode === 'none' ? (
               <button
-                onClick={startUnderlayCalibration}
+                onClick={() => startUnderlayCalibration()}
                 className="w-full py-1.5 px-3 rounded bg-gray-700 hover:bg-gray-600 text-gray-200 text-xs transition-colors"
               >
                 Pick Points on Canvas

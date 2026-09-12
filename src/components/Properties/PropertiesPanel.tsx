@@ -1,8 +1,34 @@
 import React from 'react'
+import { LengthInput } from './LengthInput'
+import { OpeningScheduleFields } from './OpeningScheduleFields'
+import { CanvasBloxPreview, DRAWING_PREVIEW_CATEGORIES } from '../Sidebar/CanvasBloxPreview'
+import { AnnotationTargetField } from './AnnotationTargetField'
+import { DEMOLITION_IDS } from '../../utils/demolitionGeometry'
+import { DemolitionPreview } from '../Sidebar/DemolitionPreview'
+import { Box, MousePointer2, FlipHorizontal2, FlipVertical2, LockKeyhole, UnlockKeyhole, Trash2 } from 'lucide-react'
+import { FurniturePreview } from '../Sidebar/FurniturePreview'
+import { REFINED_FURNITURE } from '../../utils/furnitureGeometry'
+import { REFINED_CASEWORK } from '../../utils/caseworkGeometry'
+import { REFINED_FIXTURES } from '../../utils/fixtureGeometry'
+import { CirculationPreview } from '../Sidebar/CirculationPreview'
+import { WallPreview } from '../Sidebar/WallPreview'
+import { REFINED_WALLS } from '../../utils/wallGeometry'
+import { REFINED_STRUCTURAL } from '../../utils/structuralGeometry'
+import { REFINED_ELECTRICAL } from '../../utils/electricalGeometry'
+import { ElectricalPreview } from '../Sidebar/ElectricalPreview'
+import { REFINED_EQUIPMENT } from '../../utils/equipmentGeometry'
+import { REFINED_SITE } from '../../utils/siteGeometry'
+import { EquipmentPreview } from '../Sidebar/EquipmentPreview'
+import { StairDesignFields } from './StairDesignFields'
+import { stairRisers } from '../../utils/stairReview'
+import { REFINED_CIRCULATION, circulationDirection, boundedCount } from '../../utils/circulationGeometry'
 import { useStore, getActiveElements, getActiveDimensions } from '../../store/useStore'
+import { dimensionLayout } from '../../utils/dimensionLayout'
+import { attachDimension } from '../../utils/dimensionAnchors'
 import { getBloxById } from '../../blox/definitions'
 import { SCALES, Scale } from '../../types'
-import { formatFeet } from '../../utils/scale'
+import { formatFeet, formatInches } from '../../utils/scale'
+import { CoordinateInput } from './CoordinateInput'
 
 function fmtPreset(ft: number): string {
   const wholeFt = Math.floor(ft)
@@ -46,18 +72,25 @@ export function PropertiesPanel() {
     const dim = getActiveDimensions(useStore.getState()).find(d => d.id === selectedDimIds[0])
     if (dim) {
       const isHoriz = Math.abs(dim.x2 - dim.x1) >= Math.abs(dim.y2 - dim.y1)
-      const dist = isHoriz ? Math.abs(dim.x2 - dim.x1) : Math.abs(dim.y2 - dim.y1)
+      const dist = dimensionLayout(dim,1).value
+      const attached=attachDimension({...dim,anchor1:undefined,anchor2:undefined,needsReview:false},getActiveElements(useStore.getState()).filter(e=>!project.layers?.some(l=>l.id===e.layerId&&!l.visible)))
       return (
         <div className="flex items-center gap-4 px-4 bg-toolbar border-t border-gray-700 text-xs text-gray-300 h-9 shrink-0">
           <span className="font-semibold text-gray-200">Dimension</span>
-          <span className="text-gray-400">{isHoriz ? 'Horizontal' : 'Vertical'} · {formatFeet(dist)}</span>
+          <select aria-label="Dimension measurement" value={dim.measurement??(isHoriz?'horizontal':'vertical')} disabled={!!dim.overall}
+            onChange={e=>updateDimension(dim.id,{measurement:e.target.value as 'horizontal'|'vertical'|'aligned'})}
+            className="bg-gray-800 text-gray-200 px-2 py-1 rounded border border-gray-600">
+            <option value="horizontal">Horizontal</option><option value="vertical">Vertical</option><option value="aligned">Aligned</option>
+          </select>
+          <span className={dim.needsReview?'text-amber-400':'text-gray-400'}>{dim.needsReview?'CHECK — reference changed':project.mode==='detail'?formatInches(dist):formatFeet(dist)}</span>
+          <span className="text-gray-500">{dim.overall?'Selected walls · outer edges':dim.anchor1&&dim.anchor2?'Linked':dim.anchor1||dim.anchor2?'Partially linked':'Fixed points'}</span>
+          {!dim.overall&&project.mode!=='detail'&&<button disabled={!attached.anchor1||!attached.anchor2} title="Both endpoints must match current joined wall corners to attach" onClick={()=>updateDimension(dim.id,attached)} className="text-blue-400 disabled:text-gray-600">Attach</button>}
           <label className="flex items-center gap-1">
             <span className="text-gray-500">Offset</span>
             <input
               type="number"
               value={dim.offset.toFixed(2)}
               step={0.5}
-              min={0.5}
               onChange={e => updateDimension(dim.id, { offset: parseFloat(e.target.value) || dim.offset })}
               className="w-16 bg-gray-800 text-white px-1.5 py-0.5 rounded border border-gray-600 text-xs"
             />
@@ -108,21 +141,24 @@ export function PropertiesPanel() {
     }
   }
 
-  if (!project || selectedElementIds.length === 0) {
+  if (!project || selectedElementIds.length + selectedDimIds.length + selectedArcWallIds.length === 0) {
     return (
-      <div className="h-8 flex items-center px-4 bg-toolbar border-t border-gray-700 text-xs text-gray-500">
-        V select · H hand · W wall · D dim · S rect · R rotate · ⌘A select all · ⌘=/- zoom · ⌘0 fit · Arrows nudge · ⌘Z/⇧Z undo/redo · Del delete
+      <div className="inspector-empty">
+        <MousePointer2 size={18} aria-hidden="true" />
+        <div><strong>Nothing selected</strong><span>Select an object to inspect its properties, or choose a blox to place.</span></div>
+        <div className="inspector-shortcuts"><span><kbd>V</kbd> Select</span><span><kbd>W</kbd> Wall</span><span><kbd>D</kbd> Dimension</span><span><kbd>⌘0</kbd> Fit view</span></div>
       </div>
     )
   }
 
-  const count = selectedElementIds.length
+  const count = selectedElementIds.length + selectedDimIds.length + selectedArcWallIds.length
 
   if (count > 1) {
     return (
-      <div className="h-8 flex items-center gap-4 px-4 bg-toolbar border-t border-gray-700 text-xs text-gray-400">
-        <span>{count} elements selected</span>
-        <button onClick={deleteSelectedElements} className="text-red-400 hover:text-red-300">Delete all</button>
+      <div className="inspector-multiple">
+        <Box size={22} aria-hidden="true"/><div><strong>{count} objects selected</strong><span>Use the toolbar to align, distribute, or transform this selection.</span></div>
+        <button onClick={()=>useStore.getState().clearSelection()} className="inspector-secondary">Clear selection</button>
+        <button onClick={()=>{deleteSelectedElements();deleteSelectedDims();deleteSelectedArcWalls()}} className="inspector-danger"><Trash2 size={14}/> Delete selection</button>
       </div>
     )
   }
@@ -185,6 +221,7 @@ export function PropertiesPanel() {
     return (
       <div className="flex items-center gap-4 px-4 bg-toolbar border-t border-gray-700 text-xs text-gray-300 h-9 shrink-0">
         <span className="font-semibold text-gray-200">Leader Arrow</span>
+        <AnnotationTargetField element={el}/>
         <label className="flex items-center gap-1 flex-1">
           <span className="text-gray-500">Label</span>
           <input
@@ -193,6 +230,18 @@ export function PropertiesPanel() {
             placeholder="Callout text..."
             onChange={e => updateElement(id, { properties: { ...el.properties, label: e.target.value } })}
             className="flex-1 bg-gray-800 text-white px-1.5 py-0.5 rounded border border-gray-600 text-xs"
+          />
+        </label>
+        <label className="flex items-center gap-1">
+          <span className="text-gray-500">Size</span>
+          <input
+            type="number"
+            min={6}
+            max={36}
+            step={1}
+            value={(el.properties.fontSize as number) ?? 12}
+            onChange={e => updateElement(id, { properties: { ...el.properties, fontSize: Number(e.target.value) } })}
+            className="w-12 bg-gray-800 text-white px-1.5 py-0.5 rounded border border-gray-600 text-xs text-center"
           />
         </label>
         <button onClick={deleteSelectedElements} className="text-red-500 hover:text-red-400 ml-2">Delete</button>
@@ -330,6 +379,7 @@ export function PropertiesPanel() {
     return (
       <div className="flex items-center gap-3 px-4 bg-toolbar border-t border-gray-700 text-xs text-gray-300 h-9 shrink-0">
         <span className="font-semibold text-gray-200 shrink-0">Room Tag</span>
+        <OpeningScheduleFields element={el}/>
         <label className="flex items-center gap-1">
           <span className="text-gray-500">Name</span>
           <input type="text" value={(el.properties.roomName as string) ?? 'ROOM NAME'}
@@ -348,16 +398,18 @@ export function PropertiesPanel() {
   }
 
   // Door tag — hexagon label
-  if (el.bloxId === 'annotation-door-tag') {
+  if (el.bloxId === 'annotation-door-tag'||el.bloxId === 'annotation-window-tag') {
     return (
       <div className="flex items-center gap-3 px-4 bg-toolbar border-t border-gray-700 text-xs text-gray-300 h-9 shrink-0">
-        <span className="font-semibold text-gray-200 shrink-0">Door Tag</span>
+        <span className="font-semibold text-gray-200 shrink-0">{el.bloxId==='annotation-window-tag'?'Window Tag':'Door Tag'}</span>
+        <AnnotationTargetField element={el}/>
         <label className="flex items-center gap-1">
           <span className="text-gray-500">Label</span>
-          <input type="text" value={(el.properties.label as string) ?? '1'}
+          <input type="text" aria-label="Opening tag mark" value={(el.properties.label as string) ?? ''}
             onChange={e => updateElement(id, { properties: { ...el.properties, label: e.target.value } })}
             className="w-12 bg-gray-800 text-white px-1.5 py-0.5 rounded border border-gray-600 text-xs text-center" />
         </label>
+        <span className={el.properties.sourceMissing?'text-amber-400':'text-gray-500'}>{el.properties.sourceMissing?'Missing opening — relink tag':el.properties.targetId?'Mark shared with linked opening':'Link to an opening to coordinate its mark'}</span>
         <button onClick={deleteSelectedElements} className="text-red-500 hover:text-red-400 ml-2 shrink-0">Delete</button>
       </div>
     )
@@ -480,6 +532,18 @@ export function PropertiesPanel() {
             className="flex-1 bg-gray-800 text-white px-1.5 py-0.5 rounded border border-gray-600 text-xs"
           />
         </label>
+        <label className="flex items-center gap-1">
+          <span className="text-gray-500">Size</span>
+          <input
+            type="number"
+            min={6}
+            max={48}
+            step={1}
+            value={(el.properties.fontSize as number) ?? 11}
+            onChange={e => updateElement(id, { properties: { ...el.properties, fontSize: Number(e.target.value) } })}
+            className="w-12 bg-gray-800 text-white px-1.5 py-0.5 rounded border border-gray-600 text-xs text-center"
+          />
+        </label>
         <button onClick={deleteSelectedElements} className="text-red-500 hover:text-red-400 ml-2">Delete</button>
       </div>
     )
@@ -516,10 +580,11 @@ export function PropertiesPanel() {
 
   // Multi-pane window: show pane count controls
   if (el.bloxId === 'window-multi') {
-    const panes = typeof el.properties.paneCount === 'number' ? el.properties.paneCount : 2
+    const panes = boundedCount(el.properties.paneCount,2,12,1)
     return (
       <div className="flex items-center gap-3 px-4 bg-toolbar border-t border-gray-700 text-xs text-gray-300 h-9 shrink-0">
         <span className="font-semibold text-gray-200">Multi-Pane Window</span>
+        <OpeningScheduleFields element={el}/>
         <label className="flex items-center gap-1">
           <span className="text-gray-500">W</span>
           <input type="number" value={el.width.toFixed(2)} step={0.5} min={1}
@@ -549,7 +614,7 @@ export function PropertiesPanel() {
 
   // Stair elevation: show step count controls
   if (el.bloxId === 'stairs-elevation') {
-    const steps = typeof el.properties.stepCount === 'number' ? el.properties.stepCount : 10
+    const steps = boundedCount(el.properties.stepCount,11,30)
     return (
       <div className="flex items-center gap-3 px-4 bg-toolbar border-t border-gray-700 text-xs text-gray-300 h-9 shrink-0">
         <span className="font-semibold text-gray-200">Stair Elevation</span>
@@ -587,21 +652,144 @@ export function PropertiesPanel() {
     )
   }
 
+  // Property line — front/side/rear role (drives the DRC setback check), bearing, length
+  if (el.bloxId === 'site-property-line') {
+    const types = ['front', 'side', 'rear'] as const
+    return (
+      <div className="flex items-center gap-3 px-4 bg-toolbar border-t border-gray-700 text-xs text-gray-300 h-9 shrink-0">
+        <span className="font-semibold text-gray-200 shrink-0">Property Line</span>
+        <span className="text-gray-500">Type</span>
+        <div className="flex items-center gap-1">
+          {types.map(t => (
+            <button key={t}
+              onClick={() => updateElement(id, { properties: { ...el.properties, lineType: t } })}
+              className={`px-1.5 py-0.5 rounded text-[10px] border capitalize transition-colors ${
+                (el.properties.lineType ?? 'side') === t ? 'bg-accent border-blue-500 text-white' : 'border-gray-600 text-gray-400 hover:text-white'
+              }`}
+            >{t}</button>
+          ))}
+        </div>
+        <label className="flex items-center gap-1">
+          <span className="text-gray-500">Bearing</span>
+          <input type="text" placeholder={`N00°00'00"E`} value={(el.properties.bearing as string) ?? ''}
+            onChange={e => updateElement(id, { properties: { ...el.properties, bearing: e.target.value } })}
+            className="w-24 bg-gray-800 text-white px-1.5 py-0.5 rounded border border-gray-600 text-xs" />
+        </label>
+        <label className="flex items-center gap-1">
+          <span className="text-gray-500">Length</span>
+          <input type="number" value={el.width.toFixed(2)} step={0.5} min={def?.minWidth ?? 5}
+            onChange={e => updateElement(id, { width: parseFloat(e.target.value) || el.width })}
+            className="w-16 bg-gray-800 text-white px-1.5 py-0.5 rounded border border-gray-600 text-xs" />
+          <span className="text-gray-600">ft</span>
+        </label>
+        <label className="flex items-center gap-1">
+          <span className="text-gray-500">∠</span>
+          <input type="number" value={el.rotation} step={1}
+            onChange={e => updateElement(id, { rotation: parseFloat(e.target.value) % 360 })}
+            className="w-14 bg-gray-800 text-white px-1.5 py-0.5 rounded border border-gray-600 text-xs" />
+          <span className="text-gray-600">°</span>
+        </label>
+        <label className="flex items-center gap-1">
+          <span className="text-gray-500">Font</span>
+          <input type="number" min={5} max={24} value={(el.properties.fontSize as number) ?? 9}
+            onChange={e => updateElement(id, { properties: { ...el.properties, fontSize: Math.max(5, Math.min(24, Number(e.target.value) || 9)) } })}
+            className="w-12 bg-gray-800 text-white px-1.5 py-0.5 rounded border border-gray-600 text-xs" />
+        </label>
+        <button onClick={deleteSelectedElements} className="text-red-500 hover:text-red-400 ml-auto">Delete</button>
+      </div>
+    )
+  }
+
+  // Setback line — required distance shown in its label
+  if (el.bloxId === 'site-setback-line') {
+    return (
+      <div className="flex items-center gap-3 px-4 bg-toolbar border-t border-gray-700 text-xs text-gray-300 h-9 shrink-0">
+        <span className="font-semibold text-gray-200 shrink-0">Setback Line</span>
+        <label className="flex items-center gap-1">
+          <span className="text-gray-500">Setback</span>
+          <input type="number" min={0} value={(el.properties.setbackFt as number) ?? 10}
+            onChange={e => updateElement(id, { properties: { ...el.properties, setbackFt: Math.max(0, Number(e.target.value) || 0) } })}
+            className="w-14 bg-gray-800 text-white px-1.5 py-0.5 rounded border border-gray-600 text-xs" />
+          <span className="text-gray-600">ft</span>
+        </label>
+        <label className="flex items-center gap-1">
+          <span className="text-gray-500">Length</span>
+          <input type="number" value={el.width.toFixed(2)} step={0.5} min={def?.minWidth ?? 5}
+            onChange={e => updateElement(id, { width: parseFloat(e.target.value) || el.width })}
+            className="w-16 bg-gray-800 text-white px-1.5 py-0.5 rounded border border-gray-600 text-xs" />
+          <span className="text-gray-600">ft</span>
+        </label>
+        <label className="flex items-center gap-1">
+          <span className="text-gray-500">∠</span>
+          <input type="number" value={el.rotation} step={1}
+            onChange={e => updateElement(id, { rotation: parseFloat(e.target.value) % 360 })}
+            className="w-14 bg-gray-800 text-white px-1.5 py-0.5 rounded border border-gray-600 text-xs" />
+          <span className="text-gray-600">°</span>
+        </label>
+        <label className="flex items-center gap-1">
+          <span className="text-gray-500">Font</span>
+          <input type="number" min={5} max={24} value={(el.properties.fontSize as number) ?? 8}
+            onChange={e => updateElement(id, { properties: { ...el.properties, fontSize: Math.max(5, Math.min(24, Number(e.target.value) || 8)) } })}
+            className="w-12 bg-gray-800 text-white px-1.5 py-0.5 rounded border border-gray-600 text-xs" />
+        </label>
+        <button onClick={deleteSelectedElements} className="text-red-500 hover:text-red-400 ml-auto">Delete</button>
+      </div>
+    )
+  }
+
+  // Easement — type + band width (height) + length (width)
+  if (el.bloxId === 'site-easement') {
+    const easementTypes = ['utility', 'drainage', 'access', 'sewer'] as const
+    return (
+      <div className="flex items-center gap-3 px-4 bg-toolbar border-t border-gray-700 text-xs text-gray-300 h-9 shrink-0">
+        <span className="font-semibold text-gray-200 shrink-0">Easement</span>
+        <div className="flex items-center gap-1">
+          {easementTypes.map(t => (
+            <button key={t}
+              onClick={() => updateElement(id, { properties: { ...el.properties, easementType: t } })}
+              className={`px-1.5 py-0.5 rounded text-[10px] border capitalize transition-colors ${
+                (el.properties.easementType ?? 'utility') === t ? 'bg-accent border-blue-500 text-white' : 'border-gray-600 text-gray-400 hover:text-white'
+              }`}
+            >{t}</button>
+          ))}
+        </div>
+        <label className="flex items-center gap-1">
+          <span className="text-gray-500">Length</span>
+          <input type="number" value={el.width.toFixed(2)} step={0.5} min={def?.minWidth ?? 5}
+            onChange={e => updateElement(id, { width: parseFloat(e.target.value) || el.width })}
+            className="w-16 bg-gray-800 text-white px-1.5 py-0.5 rounded border border-gray-600 text-xs" />
+          <span className="text-gray-600">ft</span>
+        </label>
+        <label className="flex items-center gap-1">
+          <span className="text-gray-500">Width</span>
+          <input type="number" value={el.height.toFixed(2)} step={0.5} min={def?.minHeight ?? 2}
+            onChange={e => updateElement(id, { height: parseFloat(e.target.value) || el.height })}
+            className="w-16 bg-gray-800 text-white px-1.5 py-0.5 rounded border border-gray-600 text-xs" />
+          <span className="text-gray-600">ft</span>
+        </label>
+        <label className="flex items-center gap-1">
+          <span className="text-gray-500">Font</span>
+          <input type="number" min={5} max={24} value={(el.properties.fontSize as number) ?? 8}
+            onChange={e => updateElement(id, { properties: { ...el.properties, fontSize: Math.max(5, Math.min(24, Number(e.target.value) || 8)) } })}
+            className="w-12 bg-gray-800 text-white px-1.5 py-0.5 rounded border border-gray-600 text-xs" />
+        </label>
+        <button onClick={deleteSelectedElements} className="text-red-500 hover:text-red-400 ml-auto">Delete</button>
+      </div>
+    )
+  }
+
   return (
-    <div className="flex items-center gap-4 px-4 bg-toolbar border-t border-gray-700 text-xs text-gray-300 h-9 shrink-0">
-      <span className="font-semibold text-gray-200">{def?.name ?? el.bloxId}</span>
+    <div className={`inspector-selection${el.bloxId==='stairs-straight'?' inspector-stair':''}`}>
+      <OpeningScheduleFields element={el}/>
+      <div className="inspector-identity">
+        <div className="inspector-preview" aria-hidden="true">{DRAWING_PREVIEW_CATEGORIES.has(def?.category??'')?<CanvasBloxPreview id={el.bloxId}/>:DEMOLITION_IDS.has(el.bloxId)?<DemolitionPreview id={el.bloxId}/>:REFINED_SITE.has(el.bloxId)||REFINED_EQUIPMENT.has(el.bloxId)?<EquipmentPreview id={el.bloxId}/>:REFINED_ELECTRICAL.has(el.bloxId)?<ElectricalPreview id={el.bloxId}/>:REFINED_WALLS.has(el.bloxId)?<WallPreview id={el.bloxId}/>:REFINED_CIRCULATION.has(el.bloxId)?<CirculationPreview id={el.bloxId}/>:REFINED_STRUCTURAL.has(el.bloxId)||REFINED_FURNITURE.has(el.bloxId)||REFINED_CASEWORK.has(el.bloxId)||REFINED_FIXTURES.has(el.bloxId)?<FurniturePreview id={el.bloxId}/>:<Box size={22}/>}</div>
+        <div><strong>{def?.name ?? el.bloxId}</strong><span>{def?.category ?? 'Object'}{el.locked?' · Locked':''}</span></div>
+      </div>
+      <fieldset className="inspector-group"><legend>Size & orientation</legend><div className="inspector-fields">
 
       <label className="flex items-center gap-1">
         <span className="text-gray-500">W</span>
-        <input
-          type="number"
-          value={el.width.toFixed(2)}
-          step={0.5}
-          min={def?.minWidth ?? 0.5}
-          onChange={e => updateElement(id, { width: parseFloat(e.target.value) || el.width })}
-          className="w-16 bg-gray-800 text-white px-1.5 py-0.5 rounded border border-gray-600 text-xs"
-        />
-        <span className="text-gray-600">ft</span>
+        <LengthInput key={`${id}:width`} label="Width" value={el.width} onCommit={width=>updateElement(id,{width})}/>
       </label>
 
       {/* Width preset chips */}
@@ -625,32 +813,41 @@ export function PropertiesPanel() {
 
       <label className="flex items-center gap-1">
         <span className="text-gray-500">H</span>
-        <input
-          type="number"
-          value={el.height.toFixed(2)}
-          step={0.25}
-          min={def?.minHeight ?? 0.25}
-          onChange={e => updateElement(id, { height: parseFloat(e.target.value) || el.height })}
-          className="w-16 bg-gray-800 text-white px-1.5 py-0.5 rounded border border-gray-600 text-xs"
-        />
-        <span className="text-gray-600">ft</span>
+        <LengthInput key={`${id}:height`} label="Height" value={el.height} onCommit={height=>updateElement(id,{height})}/>
       </label>
 
       <label className="flex items-center gap-1">
         <span className="text-gray-500">∠</span>
         <input
           type="number"
+          aria-label="Rotation"
           value={el.rotation}
           step={15}
-          onChange={e => updateElement(id, { rotation: parseFloat(e.target.value) % 360 })}
+          onChange={e => {const value=parseFloat(e.target.value);if(Number.isFinite(value)) updateElement(id, { rotation: value % 360 })}}
           className="w-14 bg-gray-800 text-white px-1.5 py-0.5 rounded border border-gray-600 text-xs"
         />
         <span className="text-gray-600">°</span>
       </label>
 
-      <span className="text-gray-600">
-        ({formatFeet(el.x)}, {formatFeet(el.y)})
-      </span>
+      </div></fieldset>
+      {(() => {
+        const cue=circulationDirection(el)
+        if(!cue) return null
+        const isStair=el.bloxId==='stairs-straight'||el.bloxId==='stairs-hatch'
+        const defaultSteps=Math.max(6,Math.min(32,Math.round(Math.max(el.width,el.height)/(Math.min(el.width,el.height)*.3))))
+        return <fieldset className="inspector-group"><legend>Direction & detail</legend><div className="inspector-fields">
+          <span aria-label="Direction cue" title="Drawing axes, not compass bearings">{cue.label} · {cue.direction}</span>
+          {isStair&&!(el.bloxId==='stairs-straight'&&stairRisers(el.properties)!==null)&&<label title="Schematic divisions only; enter physical risers below for measured design">Steps <input aria-label="Stair step count" type="number" min={2} max={64} step={1}
+            value={boundedCount(el.properties.stepCount,defaultSteps)}
+            onChange={e=>{const count=e.target.valueAsNumber;if(Number.isFinite(count)) updateElement(id,{properties:{...el.properties,stepCount:boundedCount(count,defaultSteps)}})}}
+            className="w-14 bg-gray-800 text-white px-1.5 py-0.5 rounded border border-gray-600 text-xs"/></label>}
+        </div></fieldset>
+      })()}
+      {el.bloxId==='stairs-straight'&&<StairDesignFields element={el}/>}
+      <fieldset className="inspector-group inspector-position"><legend>Position · feet</legend><div className="inspector-fields">
+        <label className="flex items-center gap-1"><small>X</small><CoordinateInput value={el.x} label="X coordinate" disabled={!!el.locked} onCommit={x=>updateElement(id,{x})}/></label>
+        <label className="flex items-center gap-1"><small>Y</small><CoordinateInput value={el.y} label="Y coordinate" disabled={!!el.locked} onCommit={y=>updateElement(id,{y})}/></label>
+      </div></fieldset>
 
       {/* Fill pattern + color — shown for elevation surface blox and shapes */}
       {['elev-wall-face', 'elev-spandrel-panel', 'elev-parapet', 'elev-cantilever-slab', 'elev-pier', 'shape-rect', 'shape-polygon'].includes(el.bloxId) && (() => {
@@ -691,30 +888,36 @@ export function PropertiesPanel() {
       })()}
 
       {/* Flip buttons — available on all elements */}
+      <div className="inspector-actions" role="group" aria-label="Object actions">
       <button
         onClick={() => updateElement(id, { properties: { ...el.properties, flipH: !el.properties.flipH } })}
         className={`text-xs px-2 py-0.5 rounded border transition-colors ${el.properties.flipH ? 'bg-blue-800 border-blue-500 text-white' : 'border-gray-600 text-gray-400 hover:text-white'}`}
         title="Flip Horizontal"
-      >⇄ H</button>
+        aria-label="Flip Horizontal" aria-pressed={!!el.properties.flipH}
+      ><FlipHorizontal2 size={16}/></button>
       <button
         onClick={() => updateElement(id, { properties: { ...el.properties, flipV: !el.properties.flipV } })}
         className={`text-xs px-2 py-0.5 rounded border transition-colors ${el.properties.flipV ? 'bg-blue-800 border-blue-500 text-white' : 'border-gray-600 text-gray-400 hover:text-white'}`}
         title="Flip Vertical"
-      >⇅ V</button>
+        aria-label="Flip Vertical" aria-pressed={!!el.properties.flipV}
+      ><FlipVertical2 size={16}/></button>
 
       <button
         onClick={() => updateElement(id, { locked: !el.locked })}
+        aria-label={el.locked?'Unlock object':'Lock object'} title={el.locked?'Unlock object':'Lock object'} aria-pressed={!!el.locked}
         className={`text-xs px-2 py-0.5 rounded ${el.locked ? 'bg-yellow-800 text-yellow-300' : 'text-gray-500 hover:text-gray-300'}`}
       >
-        {el.locked ? '🔒 Locked' : 'Lock'}
+        {el.locked ? <LockKeyhole size={16}/> : <UnlockKeyhole size={16}/>}
       </button>
 
       <button
         onClick={deleteSelectedElements}
         className="text-red-500 hover:text-red-400 ml-2"
+        aria-label="Delete object" title="Delete object"
       >
-        Delete
+        <Trash2 size={16} aria-hidden="true"/>
       </button>
+      </div>
     </div>
   )
 }

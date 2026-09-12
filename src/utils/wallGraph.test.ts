@@ -54,6 +54,39 @@ describe('buildWallGraph', () => {
     expect(graph.summary.interiorCount).toBe(1)
   })
 
+  it('detects a closed loop of thick wall-cmu-footing walls (1.667ft) despite their wider corner-overlap endpoint gap', () => {
+    // Same rectangle shape as the thin-wall test, but at footing-wall thickness.
+    // Corner-overlap endpoint distance here is ~1.2ft — well past the old flat
+    // 0.9ft CONN_THRESHOLD, which is exactly the bug this covers.
+    const elements = [
+      wall('top',    'wall-cmu-footing', 0, 0, 11.67, 1.667),
+      wall('right',  'wall-cmu-footing', 10, 0, 1.667, 11.67),
+      wall('bottom', 'wall-cmu-footing', 0, 10, 11.67, 1.667),
+      wall('left',   'wall-cmu-footing', 0, 0, 1.667, 11.67),
+    ]
+    const graph = buildWallGraph(elements)
+
+    expect(graph.summary.totalWalls).toBe(4)
+    expect(graph.summary.openEndCount).toBe(0)
+    expect(graph.summary.closedLoops).toBe(true)
+    expect(graph.gaps).toHaveLength(0)
+  })
+
+  it('recognizes a T-junction into a thick wall (garage wall meeting a footing band off-centerline)', () => {
+    // 'wing' butts into 'spine' at spine's near edge, same overlap convention
+    // place_wall/our footing walls use — its endpoint lands ~0.835ft off
+    // spine's centerline (half of spine's 1.667ft thickness), not on it.
+    const elements = [
+      wall('spine', 'wall-cmu-footing', 0, 0, 1.667, 30),
+      wall('wing',  'wall-cmu-footing', 0, 10, 15, 1.667),
+    ]
+    const graph = buildWallGraph(elements)
+
+    const wing = graph.walls.find(w => w.id === 'wing')!
+    expect(wing.connections.start).toContain('spine')
+    expect(wing.openEnds).toContain('end')
+  })
+
   it('returns an empty graph for no walls', () => {
     const graph = buildWallGraph([])
     expect(graph.walls).toHaveLength(0)

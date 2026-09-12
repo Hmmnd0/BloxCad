@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
 
 const api = {
+  exportPermitPDF: (html:string,defaultName:string) => ipcRenderer.invoke('export-permit-pdf',{html,defaultName}),
   saveProject: (data: string, defaultName: string) =>
     ipcRenderer.invoke('save-project', { data, defaultName }),
   openProject: () =>
@@ -10,6 +11,8 @@ const api = {
     ipcRenderer.invoke('export-png', { dataUrl, defaultName }),
   exportPDF: (dataUrl: string, imgWidth: number, imgHeight: number, defaultName: string) =>
     ipcRenderer.invoke('export-pdf', { dataUrl, imgWidth, imgHeight, defaultName }),
+  exportSVG: (svg: string, defaultName: string) =>
+    ipcRenderer.invoke('export-svg', { svg, defaultName }),
 
   // MCP bridge
   onMcpAction: (cb: (msg: { requestId: string; action: string; payload: unknown }) => void) => {

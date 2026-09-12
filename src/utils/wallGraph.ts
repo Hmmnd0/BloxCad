@@ -1,16 +1,32 @@
 import { PlacedElement } from '../types'
+import { WALL_BLOX_IDS as WALL_IDS } from '../blox/definitions'
 
-const WALL_IDS = new Set(['wall-exterior', 'wall-interior', 'wall-cmu', 'wall-glazing', 'wall-fire-1hr', 'wall-fire-2hr'])
-
-// Two endpoints are "connected" if within this distance (covers corner overlaps ~0.35ft)
+// Baseline endpoint-connection distance, sized for thin walls (~0.35ft corner
+// overlap on a 0.5-0.667ft wall). Thicker walls (e.g. wall-cmu-footing at
+// 1.667ft) legitimately have wider corner-overlap endpoint gaps — see
+// connectionThreshold below, which scales this up per wall-pair.
 const CONN_THRESHOLD = 0.9
 
 interface Pt { x: number; y: number }
 
 function dist(a: Pt, b: Pt) { return Math.hypot(a.x - b.x, a.y - b.y) }
 
-// Returns whether point p lies on the body of wall w (not just near endpoints)
-function ptOnWallBody(p: Pt, w: PlacedElement, tol = 0.6): boolean {
+// A wall's own thickness (its short dimension) sets how far its stored
+// endpoint sits from the true corner point once extended for a miter — so
+// the connection threshold for a pair must scale with the thicker of the two,
+// or wide walls (like a footing band) get flagged as "open" at corners that
+// render perfectly joined.
+function connectionThreshold(wa: PlacedElement, wb: PlacedElement): number {
+  const thicknessA = Math.min(wa.width, wa.height)
+  const thicknessB = Math.min(wb.width, wb.height)
+  return Math.max(CONN_THRESHOLD, thicknessA * 1.5, thicknessB * 1.5)
+}
+
+// Returns whether point p lies on the body of wall w (not just near endpoints).
+// tol must comfortably cover w's own half-thickness — a wall butting into a
+// thick wall (e.g. a T-junction into a footing band) lands its endpoint up to
+// half of w's thickness away from w's centerline, not right on it.
+function ptOnWallBody(p: Pt, w: PlacedElement, tol = Math.max(0.6, Math.min(w.width, w.height) / 2 + 0.1)): boolean {
   const isH = w.width >= w.height
   if (isH) {
     return Math.abs(p.y - (w.y + w.height / 2)) < tol &&
@@ -88,8 +104,9 @@ export function buildWallGraph(elements: PlacedElement[]): WallGraph {
         ['end',   'start'], ['end',   'end'],
       ]
 
+      const threshold = connectionThreshold(wa, wb)
       for (const [ea, eb] of pairs) {
-        if (dist(a[ea], b[eb]) < CONN_THRESHOLD) {
+        if (dist(a[ea], b[eb]) < threshold) {
           if (!a.connections[ea].includes(b.id)) a.connections[ea].push(b.id)
           if (!b.connections[eb].includes(a.id)) b.connections[eb].push(a.id)
         }
@@ -170,4 +187,24 @@ export function buildWallGraph(elements: PlacedElement[]): WallGraph {
       closedLoops: openEndCount === 0,
     },
   }
+}
+
+// A wall is stored extended by half its own thickness past *both* endpoints,
+// unconditionally, at the moment it's placed (see place_wall / the wall tool
+// in DrawingCanvas.tsx) — regardless of whether that end happens to touch
+// another wall yet. That's what lets two perpendicular walls overlap
+// correctly at a corner. It also means the raw stored width/height is always
+// longer than the wall's true drawn length by half-thickness per end.
+//
+// An earlier version of this only trimmed an end back when it could detect a
+// real connection there via the wall graph — which sounds more conservative,
+// but is wrong for the case that actually matters: while you're drawing a
+// *new* wall to snap against an *existing* one, that existing wall isn't
+// connected to anything yet, so the conditional version reported zero trim
+// and snapping targeted the raw padded edge (the "snaps to the selection box,
+// not the wall" bug). Since the padding is unconditional at draw time, the
+// un-padding has to be unconditional too — no wall-graph lookup needed.
+export function getWallTrim(wall: PlacedElement): { startTrim: number; endTrim: number } {
+  const halfThickness = wall.wallEndPadding ?? Math.min(wall.width, wall.height) / 2
+  return { startTrim: halfThickness, endTrim: halfThickness }
 }

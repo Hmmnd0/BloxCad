@@ -63,13 +63,14 @@ export function NewProjectDialog() {
   }
 
   return (
-    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
-      <div className="bg-gray-800 border border-gray-600 rounded-lg shadow-2xl w-[520px] max-w-full mx-4">
+    <div className="project-dialog-backdrop fixed inset-0 bg-black/70 flex items-center justify-center z-50">
+      <div role="dialog" aria-modal="true" aria-labelledby="new-project-title" className="project-dialog bg-gray-800 border border-gray-600 rounded-lg shadow-2xl w-[520px] max-w-full mx-4">
         {/* Header */}
         <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-gray-700">
           <div>
-            <h1 className="text-white font-bold text-lg tracking-tight">bloxCAD</h1>
-            <p className="text-gray-400 text-sm">Architectural Drawing Tool</p>
+            <div className="dialog-eyebrow">BLOXCAD / NEW WORKSPACE</div>
+            <h1 id="new-project-title" className="text-white font-bold text-lg tracking-tight">A place for your next idea.</h1>
+            <p className="text-gray-400 text-sm">Choose your view and scale. Start drawing.</p>
           </div>
           {project && (
             <button

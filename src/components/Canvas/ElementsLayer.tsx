@@ -5,9 +5,11 @@ import { PlacedElement, Tool } from '../../types'
 import { RENDERERS } from './renderers'
 import { useStore, getActiveElements } from '../../store/useStore'
 import { snapToGrid } from '../../utils/scale'
-import { snapElementEdges, edgeSnapThresholdFt } from '../../utils/snap'
+import { snapElementEdges, edgeSnapThresholdFt, getElementAABB, trueWallBoundsMap, trueBounds } from '../../utils/snap'
+import { WALL_BLOX_IDS as WALL_IDS_FOR_CLIP } from '../../blox/definitions'
+import { wallSolidRects } from '../../utils/hostedOpenings'
+import { isFoundation } from '../../utils/wallUnion'
 
-const WALL_IDS_FOR_CLIP = new Set(['wall-exterior', 'wall-interior', 'wall-cmu', 'wall-glazing', 'wall-fire-1hr', 'wall-fire-2hr'])
 const OPENING_IDS_FOR_CLIP = new Set(['cased-opening', 'door-single', 'door-double', 'door-sliding', 'window-single', 'window-double', 'window-multi'])
 
 interface ElementsLayerProps {
@@ -67,14 +69,14 @@ const BloxGroup = memo(function BloxGroup({
       offsetX={w / 2} offsetY={h / 2}
       rotation={element.rotation}
       opacity={activeGroupId !== null && element.groupId !== activeGroupId ? 0.35 : 1}
-      draggable={!element.locked && toolActive !== 'hand'}
+      draggable={!element.locked && toolActive === 'select'}
       onDblClick={(e) => {
-        if (!element.groupId) return
+        if (toolActive !== 'select' || !element.groupId) return
         e.cancelBubble = true
         useStore.getState().isolateElement(element.id)
       }}
       onClick={(e) => {
-        if (useStore.getState().activeBloxId) return
+        if (toolActive !== 'select' || useStore.getState().activeBloxId) return
         e.cancelBubble = true
 
         const multi = e.evt.shiftKey || e.evt.metaKey
@@ -104,7 +106,7 @@ const BloxGroup = memo(function BloxGroup({
         onSelect(element.id, multi)
       }}
       onTap={(e) => {
-        if (useStore.getState().activeBloxId) return
+        if (toolActive !== 'select' || useStore.getState().activeBloxId) return
         e.cancelBubble = true
         onSelect(element.id, false)
       }}
@@ -130,20 +132,24 @@ const BloxGroup = memo(function BloxGroup({
         const stageScale = node.getStage()?.scaleX() ?? 1
 
         const el = getActiveElements(useStore.getState()).find(e => e.id === element.id)
-        const halfW = el ? (el.width  * pixelsPerFoot) / 2 : w / 2
-        const halfH = el ? (el.height * pixelsPerFoot) / 2 : h / 2
-        const elW = el?.width  ?? element.width
-        const elH = el?.height ?? element.height
+        const bounds = el ?? element
+        const halfW = (bounds.width  * pixelsPerFoot) / 2
+        const halfH = (bounds.height * pixelsPerFoot) / 2
+        const elW = bounds.width
+        const elH = bounds.height
 
         // Current top-left in feet
         const tlXft = (node.x() - halfW) / pixelsPerFoot
         const tlYft = (node.y() - halfH) / pixelsPerFoot
 
         // Edge-snap against all other elements
-        const allElements = getActiveElements(useStore.getState())
+        const store = useStore.getState()
+        const movingIds = new Set(isSelected ? store.selectedElementIds : [element.id])
+        const hiddenLayers = new Set(store.project?.layers?.filter(l => !l.visible).map(l => l.id))
+        const allElements = getActiveElements(store).filter(e => !movingIds.has(e.id) && !hiddenLayers.has(e.layerId ?? ''))
         const threshold = edgeSnapThresholdFt(pixelsPerFoot, stageScale, 20)
         const snap = snapElementEdges(
-          { x: tlXft, y: tlYft, width: elW, height: elH },
+          { ...bounds, x: tlXft, y: tlYft, width: elW, height: elH },
           allElements, threshold, element.id
         )
 
@@ -230,8 +236,8 @@ const BloxGroup = memo(function BloxGroup({
       <Rect x={0} y={0} width={w} height={h} fill="rgba(0,0,0,0)" />
       {isSelected && (
         <Rect
-          x={-1} y={-1}
-          width={w + 2} height={h + 2}
+          x={0} y={0}
+          width={w} height={h}
           stroke="#4F9EFF" strokeWidth={1}
           strokeScaleEnabled={false}
           fill="rgba(79,158,255,0.06)"
@@ -245,6 +251,14 @@ const BloxGroup = memo(function BloxGroup({
         scaleY={(element.properties.flipV ? -1 : 1)}
         clipFunc={wallOpenings && wallOpenings.length > 0 ? (ctx: any): any => {
           const ppf = pixelsPerFoot
+          if (wallOpenings.some(op => op.wallHost?.wallId === element.id)) {
+            for (const r of wallSolidRects(element, wallOpenings)) {
+              const x = element.properties.flipH ? element.width - r.x - r.width : r.x
+              const y = element.properties.flipV ? element.height - r.y - r.height : r.y
+              ctx.rect(x * ppf, y * ppf, r.width * ppf, r.height * ppf)
+            }
+            return
+          }
           ctx.rect(0, 0, w, h)
           for (const op of wallOpenings) {
             ctx.rect(
@@ -257,12 +271,14 @@ const BloxGroup = memo(function BloxGroup({
           return ['evenodd']
         } : undefined}
       >
-        <Renderer
+        {!isFoundation(element.bloxId) && <Renderer
           widthPx={w}
           heightPx={h}
+          pixelsPerFoot={pixelsPerFoot}
           selected={isSelected}
           properties={element.properties}
-        />
+          rotation={element.rotation}
+        />}
       </Group>
     </Group>
   )
@@ -347,10 +363,10 @@ export function ElementsLayer({ pixelsPerFoot, snapFeet, toolActive }: ElementsL
 
   const wallOpeningsMap = useMemo(() => {
     const map = new Map<string, PlacedElement[]>()
-    const walls = elements.filter(el => WALL_IDS_FOR_CLIP.has(el.bloxId) && !el.rotation)
-    const openings = elements.filter(el => OPENING_IDS_FOR_CLIP.has(el.bloxId))
+    const walls = elements.filter(el => WALL_IDS_FOR_CLIP.has(el.bloxId))
+    const openings = elements.filter(el => el.wallHost || OPENING_IDS_FOR_CLIP.has(el.bloxId))
     for (const wall of walls) {
-      const hits = openings.filter(op =>
+      const hits = openings.filter(op => op.wallHost ? op.wallHost.wallId === wall.id : !wall.rotation &&
         op.x < wall.x + wall.width && op.x + op.width > wall.x &&
         op.y < wall.y + wall.height && op.y + op.height > wall.y
       )
@@ -371,8 +387,8 @@ export function ElementsLayer({ pixelsPerFoot, snapFeet, toolActive }: ElementsL
   }, [selectedElementIds])
 
   const handleMoveMany = useCallback((moves: { id: string; x: number; y: number }[]) => {
-    moves.forEach(({ id, x, y }) => updateElement(id, { x, y }))
-  }, [updateElement])
+    useStore.getState().moveElements(moves)
+  }, [])
 
   return (
     <Layer ref={layerRef}>
@@ -406,6 +422,7 @@ export function ElementsLayer({ pixelsPerFoot, snapFeet, toolActive }: ElementsL
       />
       <Transformer
         ref={transformerRef}
+        ignoreStroke={true}
         borderStroke="#4F9EFF"
         borderStrokeWidth={1.5}
         anchorStroke="#4F9EFF"
@@ -417,7 +434,7 @@ export function ElementsLayer({ pixelsPerFoot, snapFeet, toolActive }: ElementsL
         onTransform={() => {
           // Guides only — actual snapping is handled by boundBoxFunc
           const nodes = transformerRef.current?.nodes() ?? []
-          const allEls = project?.elements ?? []
+          const allEls = getActiveElements(useStore.getState())
           let guideX: number | undefined, guideY: number | undefined
           nodes.forEach(node => {
             const id = node.id()
@@ -440,11 +457,18 @@ export function ElementsLayer({ pixelsPerFoot, snapFeet, toolActive }: ElementsL
         }}
         boundBoxFunc={(oldBox, newBox) => {
           // Snap resize handles to other elements' edges.
-          // boundBoxFunc boxes are in stage/layer pixel coords (feet × pixelsPerFoot).
-          const stageScale = transformerRef.current?.getStage()?.scaleX() ?? 1
-          const threshPx = 20 / stageScale  // 20 screen pixels in stage coords
-          const allEls = project?.elements ?? []
+          // Konva's Transformer builds oldBox/newBox via node.getAbsoluteTransform()
+          // (see Transformer.js __getNodeRect/__getNodeShape), so these are in
+          // ABSOLUTE screen-pixel space — they already include stage pan and zoom.
+          // Our element bounds are stored in feet, so convert through stageX/stageY/
+          // stageScale to land in that same absolute space before comparing.
+          const { stageX, stageY, stageScale } = useStore.getState()
+          // Axis resize math does not apply to a rotated transformer frame.
+          if (Math.abs(newBox.rotation) > 1e-8) return newBox
+          const threshPx = 20  // already absolute screen pixels — matches newBox's space
+          const allEls = getActiveElements(useStore.getState())
           const selectedIds = new Set(selectedElementIds)
+          const trueWalls = trueWallBoundsMap(allEls)
 
           const oldRight  = oldBox.x + oldBox.width
           const oldBottom = oldBox.y + oldBox.height
@@ -459,10 +483,14 @@ export function ElementsLayer({ pixelsPerFoot, snapFeet, toolActive }: ElementsL
 
           for (const el of allEls) {
             if (selectedIds.has(el.id)) continue
-            const oLeft   = el.x * pixelsPerFoot
-            const oRight  = (el.x + el.width)  * pixelsPerFoot
-            const oTop    = el.y * pixelsPerFoot
-            const oBottom = (el.y + el.height) * pixelsPerFoot
+            if (project?.layers?.some(l => l.id === el.layerId && !l.visible)) continue
+            if (Math.abs((el.rotation ?? 0) % 90) > 1e-8) continue
+            const trimmed = trueBounds(el, trueWalls)
+            const bounds = trimmed === el ? getElementAABB(el) : trimmed
+            const oLeft   = stageX + bounds.x * pixelsPerFoot * stageScale
+            const oRight  = stageX + (bounds.x + bounds.width)  * pixelsPerFoot * stageScale
+            const oTop    = stageY + bounds.y * pixelsPerFoot * stageScale
+            const oBottom = stageY + (bounds.y + bounds.height) * pixelsPerFoot * stageScale
 
             if (!leftFixed) {
               for (const target of [oLeft, oRight]) {

@@ -226,6 +226,7 @@ const TOOLS = [
         y:       { type: 'number', description: 'Y position in feet (meaning depends on anchor)' },
         width:   { type: 'number', description: 'Width in feet (optional)' },
         height:  { type: 'number', description: 'Height in feet (optional)' },
+        rotation: { type: 'number', description: 'Rotation in degrees (optional, default 0) — e.g. for an angled conduit/duct run computed from two points: atan2(y2-y1, x2-x1) in degrees.' },
         anchor:  {
           type: 'string',
           enum: ['top-left', 'top-center', 'top-right', 'center-left', 'center', 'center-right', 'bottom-left', 'bottom-center', 'bottom-right'],
@@ -242,7 +243,7 @@ const TOOLS = [
         },
         properties: {
           type: 'object',
-          description: 'Optional element-specific properties merged into the element on placement. Examples: { "fillColor": "#B87333" } for copper color; { "angleDeg": 30 } for louver fins or angled panels; { "floorLabel": "FL 7 / 79\'-6\\"" } for floor markers; { "material": "COPPER SPANDREL PANEL" } for callouts; { "taperFt": 2 } for tapered slabs; { "glassColor": "#B8D2E4" } for curtain wall / ribbon window; { "solidBays": [0, 2] } for ribbon window solid bays; { "fillPattern": "triangles" } for spandrel panels.'
+          description: 'Optional element-specific properties merged into the element on placement. Examples: { "fillColor": "#B87333" } for copper color; { "angleDeg": 30 } for louver fins or angled panels; { "floorLabel": "FL 7 / 79\'-6\\"" } for floor markers; { "material": "COPPER SPANDREL PANEL" } for callouts; { "taperFt": 2 } for tapered slabs; { "glassColor": "#B8D2E4" } for curtain wall / ribbon window; { "solidBays": [0, 2] } for ribbon window solid bays; { "fillPattern": "triangles" } for spandrel panels; { "fontSize": 18 } for annotation-leader callout text size (default ~12, range 6-36) or text-note body size (default 11, range 6-48).'
         },
       },
       required: ['bloxId', 'x', 'y']
@@ -311,7 +312,7 @@ const TOOLS = [
         rotation: { type: 'number', description: 'Rotation in degrees (any value, e.g. 0, 45, 90, 135, 180, 270)' },
         properties: {
           type: 'object',
-          description: 'Element-specific properties to merge (not replace). E.g. { "fillColor": "#B87333" }, { "angleDeg": 30 }, { "floorLabel": "FL 7" }, { "material": "COPPER" }, { "taperFt": 2 }.'
+          description: 'Element-specific properties to merge (not replace). E.g. { "fillColor": "#B87333" }, { "angleDeg": 30 }, { "floorLabel": "FL 7" }, { "material": "COPPER" }, { "taperFt": 2 }, { "fontSize": 18 } for annotation-leader or text-note text size.'
         },
       },
       required: ['id']
@@ -333,13 +334,15 @@ const TOOLS = [
     description:
       'Add a dimension line between two measured points. ' +
       'offset controls how far the line sits from the reference edge in feet ' +
-      '(negative = above/left of the line, default -1.5).',
+      '(positive = up for a horizontal span (x1,y1)-(x2,y2), or left for a vertical span; ' +
+      'negative = down or right; default -1.5).',
     inputSchema: {
       type: 'object',
       properties: {
         x1:     { type: 'number' }, y1: { type: 'number' },
         x2:     { type: 'number' }, y2: { type: 'number' },
-        offset: { type: 'number', description: 'Feet offset from reference edge (default -1.5)' }
+        offset: { type: 'number', description: 'Feet offset from reference edge — positive = up/left, negative = down/right (default -1.5)' },
+        measurement: { type:'string', enum:['horizontal','vertical','aligned'], description:'Use aligned for the true distance along an angled span. Horizontal/vertical measure the projected distance. Exact joined wall corners attach automatically.' }
       },
       required: ['x1', 'y1', 'x2', 'y2']
     }
@@ -365,8 +368,12 @@ const TOOLS = [
     description:
       'Place multiple architectural elements in a single call — far faster than repeated calls. ' +
       'For wall types (wall-exterior, wall-interior, wall-cmu, wall-glazing) use x1,y1,x2,y2 — same as place_wall — thickness and corner extensions are handled automatically. ' +
-      'For all other elements use x,y (and optional width, height, anchor, rotation) — same as place_element. ' +
-      'Mix walls and non-wall elements freely in one call. ' +
+      'For furniture/fixtures that belong against a specific wall (beds, dressers, desks, vanities, toilets, tubs, closet rods, etc.) use wallId instead of x,y — same as place_on_wall — ' +
+      'it computes exact wall-flush position and rotation with no coordinate guessing, and works against walls placed earlier in the same batch call. ' +
+      'Prefer this over hand-computed x,y for anything that should sit flush against a wall: guessed coordinates only auto-snap flush when they land within ~0.5ft of the wall, ' +
+      'so an off-by-a-few-feet guess (e.g. centering a bed in the room instead of anchoring it to a wall) silently leaves it floating disconnected from any wall. ' +
+      'For everything else (freestanding furniture like a dining table, kitchen island, or a sofa arranged to face a TV) use x,y (and optional width, height, anchor, rotation) — same as place_element. ' +
+      'Mix walls, wall-attached items, and freestanding elements freely in one call. ' +
       'All elements are added as a single undo step. ' +
       'ELEVATION MODE: y = elevation from ground in feet for each element (same convention as place_element).',
     inputSchema: {
@@ -378,12 +385,16 @@ const TOOLS = [
             type: 'object',
             properties: {
               bloxId:   { type: 'string' },
-              x:        { type: 'number', description: 'For non-wall elements (with anchor)' },
-              y:        { type: 'number', description: 'For non-wall elements (with anchor)' },
+              x:        { type: 'number', description: 'For freestanding non-wall elements (with anchor)' },
+              y:        { type: 'number', description: 'For freestanding non-wall elements (with anchor)' },
               x1:       { type: 'number', description: 'Wall start X (use instead of x/y for wall types)' },
               y1:       { type: 'number', description: 'Wall start Y' },
               x2:       { type: 'number', description: 'Wall end X' },
               y2:       { type: 'number', description: 'Wall end Y' },
+              wallId:         { type: 'string', description: 'Attach this element flush to the given wall (from an earlier item in this batch, or an existing element id) — same as place_on_wall. Mutually exclusive with x,y.' },
+              face:           { type: 'string', enum: ['north', 'south', 'east', 'west'], description: 'Which face of the wall to place on when using wallId (default: south for horizontal walls, east for vertical walls)' },
+              offsetFromStart: { type: 'number', description: 'When using wallId: distance in feet from the wall start to this element\'s leading edge (mutually exclusive with centerAt)' },
+              centerAt:       { type: 'number', description: 'When using wallId: distance in feet from the wall start to center this element (mutually exclusive with offsetFromStart)' },
               width:    { type: 'number' },
               height:   { type: 'number' },
               anchor:   { type: 'string', enum: ['top-left','top-center','top-right','center-left','center','center-right','bottom-left','bottom-center','bottom-right'] },
@@ -397,6 +408,23 @@ const TOOLS = [
       },
       required: ['elements']
     }
+  },
+  {
+    name: 'repeat_elements',
+    description: 'Create a parametric linear array from existing elements. Useful for repeated windows, louvers, floor bands, and façade modules. Coordinates are drawing units; the complete repetition is one undo step.',
+    inputSchema: { type:'object', properties:{
+      sourceIds:{type:'array',items:{type:'string'},description:'Existing element IDs to repeat as a module'},
+      count:{type:'integer',minimum:1,maximum:500},
+      stepX:{type:'number',description:'X spacing per repetition in drawing units'},
+      stepY:{type:'number',description:'Y spacing per repetition in drawing units'},
+      rotationStep:{type:'number',description:'Rotation change per repetition in degrees'},
+      properties:{type:'object',description:'Optional properties merged into every copy'}
+    },required:['sourceIds','count']}
+  },
+  {
+    name: 'preview_batch',
+    description: 'Validate a proposed batch without changing the drawing. Run this before batch_place when generating a coordinated layout.',
+    inputSchema:{type:'object',properties:{elements:{type:'array',items:{type:'object'}}},required:['elements']}
   },
   {
     name: 'get_snapshot',
@@ -522,6 +550,18 @@ const TOOLS = [
       required: ['imageUrl']
     }
   },
+  {
+    name: 'calibrate_underlay',
+    description: 'Calibrate the active underlay from two pixel points and their known real-world distance. Use this after set_underlay when a known dimension is available; this is more reliable than image-width calibration.',
+    inputSchema: { type:'object', properties: {
+      p1px:{type:'object',properties:{x:{type:'number'},y:{type:'number'}},required:['x','y']},
+      p2px:{type:'object',properties:{x:{type:'number'},y:{type:'number'}},required:['x','y']},
+      realDistFt:{type:'number',description:'Known distance between the points in feet'}
+    }, required:['p1px','p2px','realDistFt'] }
+  },
+  { name:'calibrate_underlay_multi', description:'Calibrate an underlay from two or more known pixel-distance pairs. Returns averaged pixels-per-foot, residual error, and confidence.', inputSchema:{type:'object',properties:{pairs:{type:'array',items:{type:'object'}}},required:['pairs']} },
+  { name:'register_underlay', description:'Register an underlay to drawing coordinates using at least two pixel-to-feet control points. Applies scale, rotation, and translation and reports residual error/confidence.', inputSchema:{type:'object',properties:{points:{type:'array',items:{type:'object'}}},required:['points']} },
+  { name:'set_elevation_datum', description:'Store a named elevation datum in feet for repeatable elevation placement and verification.', inputSchema:{type:'object',properties:{name:{type:'string'},elevationFt:{type:'number'}},required:['name','elevationFt']} },
   {
     name: 'clear_underlay',
     description: 'Remove the current underlay reference image.',
@@ -655,10 +695,8 @@ const TOOLS = [
   {
     name: 'auto_dimension',
     description:
-      'Auto-generate chained dimension strings for one or more elements. ' +
-      'Creates a vertical chain on the left showing each element height, ' +
-      'a horizontal chain on top showing each element width, ' +
-      'and overall bounding-box dimensions when multiple segments exist. ' +
+      'Add overall dimensions above and to the left. For selected straight walls, measures the connected same-type, same-layer union and follows edits. Foundation overall dimensions use outer footing edges. ' +
+      'For a single non-wall element, measures its width and height. Does not generate segmented chains. ' +
       'Pass element IDs to dimension, or omit ids to dimension all selected elements.',
     inputSchema: {
       type: 'object',
@@ -936,6 +974,11 @@ const TOOLS = [
       },
       required: ['checks']
     }
+  },
+  {
+    name: 'precision_audit',
+    description: 'Run a precision audit of the active drawing. Reports disconnected wall ends, associative dimensions needing review, underlay calibration status, and the wall topology summary. Use before and after MCP tracing or a coordinated batch.',
+    inputSchema: { type:'object', properties:{} }
   },
 ]
 

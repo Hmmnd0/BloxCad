@@ -1,6 +1,37 @@
 import React from 'react'
+import { CanvasBloxPreview, DRAWING_PREVIEW_CATEGORIES } from './CanvasBloxPreview'
+import { getBloxById } from '../../blox/definitions'
+import { DEMOLITION_IDS } from '../../utils/demolitionGeometry'
+import { DemolitionPreview } from './DemolitionPreview'
+import { REFINED_WALLS } from '../../utils/wallGeometry'
+import { REFINED_STRUCTURAL } from '../../utils/structuralGeometry'
+import { REFINED_ELECTRICAL } from '../../utils/electricalGeometry'
+import { ElectricalPreview } from './ElectricalPreview'
+import { REFINED_EQUIPMENT } from '../../utils/equipmentGeometry'
+import { REFINED_SITE } from '../../utils/siteGeometry'
+import { REFINED_ROUTING } from '../../utils/routingGeometry'
+import { RoutingPreview } from './RoutingPreview'
+import { EquipmentPreview } from './EquipmentPreview'
+import { WallPreview } from './WallPreview'
+import { REFINED_CIRCULATION } from '../../utils/circulationGeometry'
+import { CirculationPreview } from './CirculationPreview'
 import { BloxDefinition } from '../../types'
 import { useStore } from '../../store/useStore'
+import { furnitureColor } from '../../utils/furnitureStyle'
+import { REFINED_FURNITURE } from '../../utils/furnitureGeometry'
+import { REFINED_CASEWORK } from '../../utils/caseworkGeometry'
+import { REFINED_FIXTURES } from '../../utils/fixtureGeometry'
+import { FurniturePreview } from './FurniturePreview'
+
+function styleFurniturePreview(node: React.ReactNode): React.ReactNode {
+  if (!React.isValidElement(node)) return node
+  const props = node.props as { fill?: string; stroke?: string; children?: React.ReactNode }
+  return React.cloneElement(node as React.ReactElement<typeof props>, {
+    ...(props.fill ? { fill: furnitureColor(props.fill) } : {}),
+    ...(props.stroke ? { stroke: furnitureColor(props.stroke) } : {}),
+    children: React.Children.map(props.children, styleFurniturePreview),
+  })
+}
 
 interface BloxItemProps {
   def: BloxDefinition
@@ -8,6 +39,14 @@ interface BloxItemProps {
 
 // SVG thumbnails for each blox type
 function BloxThumbnail({ bloxId }: { bloxId: string }) {
+  if(DRAWING_PREVIEW_CATEGORIES.has(getBloxById(bloxId)?.category??''))return <div className="blox-preview flex items-center justify-center"><CanvasBloxPreview id={bloxId}/></div>
+  if(DEMOLITION_IDS.has(bloxId))return <div className="blox-preview flex items-center justify-center"><DemolitionPreview id={bloxId}/></div>
+  if(REFINED_WALLS.has(bloxId))return <div className="blox-preview flex items-center justify-center"><WallPreview id={bloxId}/></div>
+  if(REFINED_ELECTRICAL.has(bloxId))return <div className="blox-preview flex items-center justify-center"><ElectricalPreview id={bloxId}/></div>
+  if(REFINED_SITE.has(bloxId)||REFINED_EQUIPMENT.has(bloxId))return <div className="blox-preview flex items-center justify-center"><EquipmentPreview id={bloxId}/></div>
+  if(REFINED_ROUTING.has(bloxId))return <div className="blox-preview flex items-center justify-center"><RoutingPreview id={bloxId}/></div>
+  if (REFINED_CIRCULATION.has(bloxId)) return <div className="blox-preview flex items-center justify-center"><CirculationPreview id={bloxId}/></div>
+  if (REFINED_STRUCTURAL.has(bloxId) || REFINED_FURNITURE.has(bloxId) || REFINED_CASEWORK.has(bloxId) || REFINED_FIXTURES.has(bloxId)) return <div className="blox-preview flex items-center justify-center"><FurniturePreview id={bloxId} /></div>
   const size = 40
   const s = size
 
@@ -31,6 +70,14 @@ function BloxThumbnail({ bloxId }: { bloxId: string }) {
         <line x1={2} y1={20} x2={38} y2={20} stroke="#555" strokeWidth={0.5} />
         {[10,20,30].map(x => <line key={x} x1={x} y1={12} x2={x} y2={20} stroke="#555" strokeWidth={0.5}/>)}
         {[5,15,25,35].map(x => <line key={x} x1={x} y1={20} x2={x} y2={28} stroke="#555" strokeWidth={0.5}/>)}
+      </svg>
+    ),
+    'wall-cmu-footing': (
+      <svg width={s} height={s} viewBox="0 0 40 40">
+        <rect x={2} y={8} width={36} height={24} fill="#E4E4E4" stroke="#999" strokeWidth={0.6} strokeDasharray="3,2" />
+        {[6,14,22,30].map(x => <line key={x} x1={x} y1={8} x2={x+6} y2={32} stroke="#AAA" strokeWidth={0.4}/>)}
+        <rect x={2} y={16} width={36} height={8} fill="#888" stroke="#111" strokeWidth={0.8} />
+        <line x1={2} y1={20} x2={38} y2={20} stroke="#555" strokeWidth={0.5} />
       </svg>
     ),
     'insulation-batt': (
@@ -641,6 +688,21 @@ function BloxThumbnail({ bloxId }: { bloxId: string }) {
         <line x1={2} y1={24} x2={38} y2={24} stroke="#111" strokeWidth={1.4} strokeDasharray="9 3 2 3"/>
       </svg>
     ),
+    'site-setback-line': (
+      <svg width={s} height={s} viewBox="0 0 40 40">
+        <text x={20} y={16} fontSize={6} textAnchor="middle" fill="#3A6EA5" fontFamily="sans-serif">SETBACK</text>
+        <line x1={2} y1={24} x2={38} y2={24} stroke="#3A6EA5" strokeWidth={1} strokeDasharray="4 4"/>
+      </svg>
+    ),
+    'site-easement': (
+      <svg width={s} height={s} viewBox="0 0 40 40">
+        <rect x={2} y={13} width={36} height={14} fill="rgba(58,110,165,0.08)" stroke="#3A6EA5" strokeWidth={0.8} strokeDasharray="5 3"/>
+        {[-8,0,8,16,24,32,40].map(x => (
+          <line key={x} x1={x} y1={27} x2={x+14} y2={13} stroke="#3A6EA5" strokeWidth={0.5} opacity={0.5}/>
+        ))}
+        <text x={20} y={24} fontSize={5.5} textAnchor="middle" fill="#3A6EA5" fontFamily="sans-serif">ESMT</text>
+      </svg>
+    ),
     'site-sidewalk': (
       <svg width={s} height={s} viewBox="0 0 40 40">
         <rect x={3} y={12} width={34} height={16} fill="none" stroke="#111" strokeWidth={0.8}/>
@@ -1035,6 +1097,16 @@ function BloxThumbnail({ bloxId }: { bloxId: string }) {
         ))}
       </svg>
     ),
+    'detail-cmu-block': (
+      <svg width={s} height={s} viewBox="0 0 40 40">
+        <rect x={8} y={4} width={24} height={32} fill="#AFAFAF" stroke="#111" strokeWidth={1}/>
+        {[12,20,28].map(y=>(
+          <line key={y} x1={8} y1={y} x2={32} y2={y} stroke="#6E6E6E" strokeWidth={0.6} opacity={0.7}/>
+        ))}
+        <line x1={8} y1={4} x2={32} y2={28} stroke="#8A8A8A" strokeWidth={0.5} opacity={0.5}/>
+        <line x1={8} y1={16} x2={32} y2={36} stroke="#8A8A8A" strokeWidth={0.5} opacity={0.5}/>
+      </svg>
+    ),
     // ── Soffit detail elements ──
     'detail-plywood': (
       <svg width={s} height={s} viewBox="0 0 40 40">
@@ -1130,13 +1202,6 @@ function BloxThumbnail({ bloxId }: { bloxId: string }) {
         <circle cx={20} cy={22} r={11} fill="#f5f5f5" stroke="#888" strokeWidth={0.9}/>
         <circle cx={20} cy={22} r={5} fill="white" stroke="#bbb" strokeWidth={0.6}/>
         <text x={20} y={10} textAnchor="middle" fontSize="6" fill="#888" fontFamily="sans-serif">D</text>
-      </svg>
-    ),
-    'fixture-water-heater': (
-      <svg width={s} height={s} viewBox="0 0 40 40">
-        <circle cx={20} cy={20} r={17} fill="white" stroke="#555" strokeWidth={1.2}/>
-        <circle cx={20} cy={20} r={10} fill="#f5f5f5" stroke="#bbb" strokeWidth={0.6}/>
-        <text x={20} y={23} textAnchor="middle" fontSize="7" fill="#888" fontFamily="sans-serif">WH</text>
       </svg>
     ),
     'fixture-utility-sink': (
@@ -1266,11 +1331,376 @@ function BloxThumbnail({ bloxId }: { bloxId: string }) {
         <line x1={17} y1={22} x2={23} y2={22} stroke="#AA9070" strokeWidth={0.4} opacity={0.6}/>
       </svg>
     ),
+
+    // ── Electrical ──
+    'elec-panel': (
+      <svg width={s} height={s} viewBox="0 0 40 40">
+        <rect x={9} y={6} width={22} height={28} fill="#B8860B" stroke="#333" strokeWidth={0.8}/>
+        <text x={20} y={23} textAnchor="middle" fontSize="6" fill="white" fontFamily="sans-serif">PNL</text>
+      </svg>
+    ),
+    'elec-meter': (
+      <svg width={s} height={s} viewBox="0 0 40 40">
+        <circle cx={20} cy={20} r={15} fill="white" stroke="#B8860B" strokeWidth={1.4}/>
+        <text x={20} y={24} textAnchor="middle" fontSize="10" fontWeight="bold" fill="#B8860B" fontFamily="sans-serif">M</text>
+      </svg>
+    ),
+    'elec-outlet': (
+      <svg width={s} height={s} viewBox="0 0 40 40">
+        <circle cx={20} cy={20} r={14} fill="white" stroke="#B8860B" strokeWidth={1.4}/>
+        <line x1={15} y1={14} x2={15} y2={26} stroke="#B8860B" strokeWidth={1}/>
+        <line x1={25} y1={14} x2={25} y2={26} stroke="#B8860B" strokeWidth={1}/>
+      </svg>
+    ),
+    'elec-outlet-gfci': (
+      <svg width={s} height={s} viewBox="0 0 40 40">
+        <circle cx={20} cy={22} r={13} fill="white" stroke="#B8860B" strokeWidth={1.4}/>
+        <line x1={15} y1={17} x2={15} y2={27} stroke="#B8860B" strokeWidth={1}/>
+        <line x1={25} y1={17} x2={25} y2={27} stroke="#B8860B" strokeWidth={1}/>
+        <text x={20} y={9} textAnchor="middle" fontSize="6" fontWeight="bold" fill="#B8860B" fontFamily="sans-serif">GFCI</text>
+      </svg>
+    ),
+    'elec-switch': (
+      <svg width={s} height={s} viewBox="0 0 40 40">
+        <text x={20} y={26} textAnchor="middle" fontSize="20" fontWeight="bold" fill="#B8860B" fontFamily="sans-serif">S</text>
+      </svg>
+    ),
+    'elec-light-ceiling': (
+      <svg width={s} height={s} viewBox="0 0 40 40">
+        <circle cx={20} cy={20} r={13} fill="none" stroke="#B8860B" strokeWidth={1.4}/>
+        <line x1={11} y1={11} x2={29} y2={29} stroke="#B8860B" strokeWidth={0.8}/>
+        <line x1={29} y1={11} x2={11} y2={29} stroke="#B8860B" strokeWidth={0.8}/>
+      </svg>
+    ),
+    'elec-light-recessed': (
+      <svg width={s} height={s} viewBox="0 0 40 40">
+        <circle cx={20} cy={20} r={13} fill="none" stroke="#B8860B" strokeWidth={1.4}/>
+        <circle cx={20} cy={20} r={5} fill="#B8860B"/>
+      </svg>
+    ),
+    'elec-light-exterior': (
+      <svg width={s} height={s} viewBox="0 0 40 40">
+        <circle cx={20} cy={20} r={9} fill="none" stroke="#B8860B" strokeWidth={1.4}/>
+        {[45,135,225,315].map(a => {
+          const r1=13, r2=17, rad=a*Math.PI/180
+          return <line key={a} x1={20+Math.cos(rad)*r1} y1={20+Math.sin(rad)*r1} x2={20+Math.cos(rad)*r2} y2={20+Math.sin(rad)*r2} stroke="#B8860B" strokeWidth={1}/>
+        })}
+      </svg>
+    ),
+    'elec-ceiling-fan': (
+      <svg width={s} height={s} viewBox="0 0 40 40">
+        <circle cx={20} cy={20} r={16} fill="none" stroke="#B8860B" strokeWidth={0.8}/>
+        <line x1={20} y1={20} x2={20} y2={5} stroke="#B8860B" strokeWidth={1.6}/>
+        <line x1={20} y1={20} x2={35} y2={20} stroke="#B8860B" strokeWidth={1.6}/>
+        <line x1={20} y1={20} x2={20} y2={35} stroke="#B8860B" strokeWidth={1.6}/>
+        <line x1={20} y1={20} x2={5} y2={20} stroke="#B8860B" strokeWidth={1.6}/>
+        <circle cx={20} cy={20} r={2.5} fill="#B8860B"/>
+      </svg>
+    ),
+    'elec-outlet-240v': (
+      <svg width={s} height={s} viewBox="0 0 40 40">
+        <circle cx={20} cy={18} r={12} fill="white" stroke="#B8860B" strokeWidth={1.4}/>
+        <line x1={16} y1={13} x2={16} y2={23} stroke="#B8860B" strokeWidth={1}/>
+        <line x1={24} y1={13} x2={24} y2={23} stroke="#B8860B" strokeWidth={1}/>
+        <text x={20} y={36} textAnchor="middle" fontSize="7" fontWeight="bold" fill="#B8860B" fontFamily="sans-serif">240V</text>
+      </svg>
+    ),
+    'elec-disconnect': (
+      <svg width={s} height={s} viewBox="0 0 40 40">
+        <rect x={4} y={12} width={32} height={16} fill="white" stroke="#B8860B" strokeWidth={1.4}/>
+        <text x={20} y={23} textAnchor="middle" fontSize="6" fill="#B8860B" fontFamily="sans-serif">DISC</text>
+      </svg>
+    ),
+    'elec-doorbell': (
+      <svg width={s} height={s} viewBox="0 0 40 40">
+        <circle cx={20} cy={20} r={8} fill="#B8860B" stroke="#B8860B" strokeWidth={1}/>
+      </svg>
+    ),
+    'elec-conduit': (
+      <svg width={s} height={s} viewBox="0 0 40 40">
+        <line x1={2} y1={15} x2={38} y2={15} stroke="#B8860B" strokeWidth={1.4}/>
+        <line x1={2} y1={25} x2={38} y2={25} stroke="#B8860B" strokeWidth={1.4}/>
+      </svg>
+    ),
+    'elec-circuit-wire': (
+      <svg width={s} height={s} viewBox="0 0 40 40">
+        <path d="M 2,32 Q 20,4 38,32" fill="none" stroke="#B8860B" strokeWidth={1.4} strokeDasharray="4,3"/>
+      </svg>
+    ),
+    'elec-homerun': (
+      <svg width={s} height={s} viewBox="0 0 40 40">
+        <line x1={2} y1={24} x2={15} y2={24} stroke="#B8860B" strokeWidth={1.4}/>
+        <line x1={13} y1={29} x2={19} y2={19} stroke="#B8860B" strokeWidth={1}/>
+        <line x1={19} y1={24} x2={30} y2={24} stroke="#B8860B" strokeWidth={1.4}/>
+        <polygon points="30,19 38,24 30,29" fill="#B8860B"/>
+        <text x={20} y={12} textAnchor="middle" fontSize="7" fontWeight="bold" fill="#B8860B" fontFamily="sans-serif">A3</text>
+      </svg>
+    ),
+    'elec-switch-3way': (
+      <svg width={s} height={s} viewBox="0 0 40 40">
+        <text x={20} y={26} textAnchor="middle" fontSize="15" fontWeight="bold" fill="#B8860B" fontFamily="sans-serif">S3</text>
+      </svg>
+    ),
+    'elec-switch-dimmer': (
+      <svg width={s} height={s} viewBox="0 0 40 40">
+        <text x={20} y={26} textAnchor="middle" fontSize="15" fontWeight="bold" fill="#B8860B" fontFamily="sans-serif">SD</text>
+      </svg>
+    ),
+
+    // ── Mechanical ──
+    'mech-furnace': (
+      <svg width={s} height={s} viewBox="0 0 40 40">
+        <rect x={4} y={6} width={32} height={28} fill="white" stroke="#2E7D5B" strokeWidth={1.4}/>
+        <text x={20} y={23} textAnchor="middle" fontSize="6" fill="#2E7D5B" fontFamily="sans-serif">FURN</text>
+      </svg>
+    ),
+    'mech-condenser': (
+      <svg width={s} height={s} viewBox="0 0 40 40">
+        <rect x={4} y={4} width={32} height={32} fill="white" stroke="#2E7D5B" strokeWidth={1.4}/>
+        <circle cx={20} cy={20} r={11} fill="none" stroke="#2E7D5B" strokeWidth={1}/>
+        {[0,60,120].map(a => {
+          const rad=a*Math.PI/180
+          return <line key={a} x1={20-Math.cos(rad)*11} y1={20-Math.sin(rad)*11} x2={20+Math.cos(rad)*11} y2={20+Math.sin(rad)*11} stroke="#2E7D5B" strokeWidth={0.8}/>
+        })}
+      </svg>
+    ),
+    'mech-register-supply': (
+      <svg width={s} height={s} viewBox="0 0 40 40">
+        <rect x={4} y={10} width={32} height={20} fill="white" stroke="#2E7D5B" strokeWidth={1.4}/>
+        <line x1={4} y1={10} x2={36} y2={30} stroke="#2E7D5B" strokeWidth={0.8}/>
+        <line x1={36} y1={10} x2={4} y2={30} stroke="#2E7D5B" strokeWidth={0.8}/>
+      </svg>
+    ),
+    'mech-register-return': (
+      <svg width={s} height={s} viewBox="0 0 40 40">
+        <rect x={4} y={10} width={32} height={20} fill="white" stroke="#2E7D5B" strokeWidth={1.4}/>
+        {[12,20,28].map(x => <line key={x} x1={x} y1={13} x2={x} y2={27} stroke="#2E7D5B" strokeWidth={0.8}/>)}
+      </svg>
+    ),
+    'mech-thermostat': (
+      <svg width={s} height={s} viewBox="0 0 40 40">
+        <circle cx={20} cy={20} r={14} fill="white" stroke="#2E7D5B" strokeWidth={1.4}/>
+        <text x={20} y={24} textAnchor="middle" fontSize="10" fontWeight="bold" fill="#2E7D5B" fontFamily="sans-serif">T</text>
+      </svg>
+    ),
+    'mech-exhaust-fan-bath': (
+      <svg width={s} height={s} viewBox="0 0 40 40">
+        <rect x={4} y={4} width={32} height={32} fill="white" stroke="#2E7D5B" strokeWidth={1.4}/>
+        <circle cx={20} cy={20} r={7} fill="none" stroke="#2E7D5B" strokeWidth={1}/>
+        <line x1={20} y1={20} x2={20} y2={11} stroke="#2E7D5B" strokeWidth={1}/>
+        <line x1={20} y1={20} x2={29} y2={20} stroke="#2E7D5B" strokeWidth={1}/>
+        <line x1={20} y1={20} x2={20} y2={29} stroke="#2E7D5B" strokeWidth={1}/>
+        <line x1={20} y1={20} x2={11} y2={20} stroke="#2E7D5B" strokeWidth={1}/>
+      </svg>
+    ),
+    'mech-range-hood': (
+      <svg width={s} height={s} viewBox="0 0 40 40">
+        <rect x={4} y={10} width={32} height={20} fill="white" stroke="#2E7D5B" strokeWidth={1.4} strokeDasharray="4,2"/>
+        <text x={20} y={23} textAnchor="middle" fontSize="6" fill="#2E7D5B" fontFamily="sans-serif">HOOD</text>
+      </svg>
+    ),
+    'mech-duct-supply': (
+      <svg width={s} height={s} viewBox="0 0 40 40">
+        <rect x={2} y={15} width={36} height={10} fill="rgba(46,125,91,0.08)" stroke="#2E7D5B" strokeWidth={1}/>
+        <line x1={5} y1={20} x2={28} y2={20} stroke="#2E7D5B" strokeWidth={0.8}/>
+        <polyline points="23,15 28,20 23,25" fill="none" stroke="#2E7D5B" strokeWidth={0.8}/>
+      </svg>
+    ),
+    'mech-duct-return': (
+      <svg width={s} height={s} viewBox="0 0 40 40">
+        <rect x={2} y={13} width={36} height={14} fill="rgba(46,125,91,0.15)" stroke="#2E7D5B" strokeWidth={1.4} strokeDasharray="4,2"/>
+        <line x1={2} y1={13} x2={38} y2={27} stroke="#2E7D5B" strokeWidth={0.8}/>
+        <line x1={38} y1={13} x2={2} y2={27} stroke="#2E7D5B" strokeWidth={0.8}/>
+      </svg>
+    ),
+    'mech-minisplit': (
+      <svg width={s} height={s} viewBox="0 0 40 40">
+        <rect x={3} y={13} width={34} height={14} fill="white" stroke="#2E7D5B" strokeWidth={1.4}/>
+        {[17,20,23].map(y => <line key={y} x1={7} y1={y} x2={33} y2={y} stroke="#2E7D5B" strokeWidth={0.6}/>)}
+      </svg>
+    ),
+    'mech-erv': (
+      <svg width={s} height={s} viewBox="0 0 40 40">
+        <rect x={5} y={5} width={30} height={30} fill="white" stroke="#2E7D5B" strokeWidth={1.4}/>
+        <text x={20} y={23} textAnchor="middle" fontSize="8" fill="#2E7D5B" fontFamily="sans-serif">ERV</text>
+      </svg>
+    ),
+    'mech-dryer-vent-cap': (
+      <svg width={s} height={s} viewBox="0 0 40 40">
+        <circle cx={20} cy={20} r={14} fill="white" stroke="#2E7D5B" strokeWidth={1.4}/>
+        <line x1={12} y1={20} x2={28} y2={20} stroke="#2E7D5B" strokeWidth={1}/>
+      </svg>
+    ),
+
+    // ── Plumbing ──
+    'plumb-water-heater': (
+      <svg width={s} height={s} viewBox="0 0 40 40">
+        <circle cx={20} cy={20} r={16} fill="white" stroke="#2A5FA5" strokeWidth={1.4}/>
+        <text x={20} y={23} textAnchor="middle" fontSize="7" fontWeight="bold" fill="#2A5FA5" fontFamily="sans-serif">WH</text>
+      </svg>
+    ),
+    'plumb-cleanout': (
+      <svg width={s} height={s} viewBox="0 0 40 40">
+        <circle cx={20} cy={19} r={13} fill="white" stroke="#2A5FA5" strokeWidth={1.4}/>
+        <circle cx={20} cy={19} r={5} fill="#2A5FA5"/>
+        <text x={20} y={36} textAnchor="middle" fontSize="6" fill="#2A5FA5" fontFamily="sans-serif">CO</text>
+      </svg>
+    ),
+    'plumb-gas-meter': (
+      <svg width={s} height={s} viewBox="0 0 40 40">
+        <rect x={4} y={10} width={32} height={20} fill="white" stroke="#2A5FA5" strokeWidth={1.4}/>
+        <text x={20} y={23} textAnchor="middle" fontSize="7" fontWeight="bold" fill="#2A5FA5" fontFamily="sans-serif">GAS</text>
+      </svg>
+    ),
+    'plumb-hose-bibb': (
+      <svg width={s} height={s} viewBox="0 0 40 40">
+        <circle cx={20} cy={20} r={14} fill="none" stroke="#2A5FA5" strokeWidth={1.4}/>
+        <line x1={20} y1={7} x2={20} y2={33} stroke="#2A5FA5" strokeWidth={1}/>
+      </svg>
+    ),
+    'plumb-roof-vent': (
+      <svg width={s} height={s} viewBox="0 0 40 40">
+        <circle cx={20} cy={20} r={14} fill="none" stroke="#2A5FA5" strokeWidth={1.4}/>
+        <circle cx={20} cy={20} r={5} fill="#2A5FA5"/>
+      </svg>
+    ),
+    'plumb-floor-drain': (
+      <svg width={s} height={s} viewBox="0 0 40 40">
+        <circle cx={20} cy={20} r={14} fill="white" stroke="#2A5FA5" strokeWidth={1.4}/>
+        <line x1={12} y1={20} x2={28} y2={20} stroke="#2A5FA5" strokeWidth={0.8}/>
+        <line x1={20} y1={12} x2={20} y2={28} stroke="#2A5FA5" strokeWidth={0.8}/>
+      </svg>
+    ),
+    'plumb-sump-pump': (
+      <svg width={s} height={s} viewBox="0 0 40 40">
+        <circle cx={20} cy={20} r={15} fill="white" stroke="#2A5FA5" strokeWidth={1.4}/>
+        <text x={20} y={24} textAnchor="middle" fontSize="8" fontWeight="bold" fill="#2A5FA5" fontFamily="sans-serif">SP</text>
+      </svg>
+    ),
+    'plumb-water-softener': (
+      <svg width={s} height={s} viewBox="0 0 40 40">
+        <rect x={7} y={5} width={26} height={30} fill="white" stroke="#2A5FA5" strokeWidth={1.4}/>
+        <text x={20} y={23} textAnchor="middle" fontSize="8" fill="#2A5FA5" fontFamily="sans-serif">WS</text>
+      </svg>
+    ),
+    'plumb-shutoff-valve': (
+      <svg width={s} height={s} viewBox="0 0 40 40">
+        <polygon points="4,8 20,20 4,32" fill="white" stroke="#2A5FA5" strokeWidth={1.4}/>
+        <polygon points="36,8 20,20 36,32" fill="white" stroke="#2A5FA5" strokeWidth={1.4}/>
+      </svg>
+    ),
+    'plumb-washer-box': (
+      <svg width={s} height={s} viewBox="0 0 40 40">
+        <rect x={4} y={4} width={32} height={32} fill="white" stroke="#2A5FA5" strokeWidth={1.4}/>
+        <circle cx={13} cy={14} r={4} fill="none" stroke="#2A5FA5" strokeWidth={0.8}/>
+        <circle cx={27} cy={14} r={4} fill="none" stroke="#2A5FA5" strokeWidth={0.8}/>
+        <circle cx={20} cy={27} r={5} fill="none" stroke="#2A5FA5" strokeWidth={0.8}/>
+      </svg>
+    ),
+
+    // ── Low Voltage ──
+    'lv-data-jack': (
+      <svg width={s} height={s} viewBox="0 0 40 40">
+        <polygon points="8,10 32,10 20,32" fill="white" stroke="#6B4FA0" strokeWidth={1.4}/>
+        <text x={20} y={20} textAnchor="middle" fontSize="8" fontWeight="bold" fill="#6B4FA0" fontFamily="sans-serif">D</text>
+      </svg>
+    ),
+    'lv-coax-jack': (
+      <svg width={s} height={s} viewBox="0 0 40 40">
+        <polygon points="8,10 32,10 20,32" fill="white" stroke="#6B4FA0" strokeWidth={1.4}/>
+        <text x={20} y={20} textAnchor="middle" fontSize="8" fontWeight="bold" fill="#6B4FA0" fontFamily="sans-serif">C</text>
+      </svg>
+    ),
+    'lv-panel': (
+      <svg width={s} height={s} viewBox="0 0 40 40">
+        <rect x={9} y={10} width={22} height={20} fill="white" stroke="#6B4FA0" strokeWidth={1.4}/>
+        <text x={20} y={23} textAnchor="middle" fontSize="8" fill="#6B4FA0" fontFamily="sans-serif">LV</text>
+      </svg>
+    ),
+    'lv-security-keypad': (
+      <svg width={s} height={s} viewBox="0 0 40 40">
+        <rect x={9} y={6} width={22} height={28} fill="white" stroke="#6B4FA0" strokeWidth={1.4}/>
+        <line x1={13} y1={17} x2={27} y2={17} stroke="#6B4FA0" strokeWidth={0.8}/>
+        <line x1={13} y1={23} x2={27} y2={23} stroke="#6B4FA0" strokeWidth={0.8}/>
+      </svg>
+    ),
+    'lv-camera': (
+      <svg width={s} height={s} viewBox="0 0 40 40">
+        <circle cx={20} cy={20} r={15} fill="white" stroke="#6B4FA0" strokeWidth={1.4}/>
+        <circle cx={20} cy={20} r={6} fill="#6B4FA0"/>
+      </svg>
+    ),
+
+    // ── Fire/Safety ──
+    'co-alarm': (
+      <svg width={s} height={s} viewBox="0 0 40 40">
+        <circle cx={20} cy={20} r={15} fill="white" stroke="#B8860B" strokeWidth={1.2}/>
+        <text x={20} y={24} textAnchor="middle" fontSize="9" fontWeight="bold" fill="#B8860B" fontFamily="sans-serif">CO</text>
+      </svg>
+    ),
+
+    // ── Site ──
+    'site-driveway': (
+      <svg width={s} height={s} viewBox="0 0 40 40">
+        <rect x={2} y={10} width={36} height={20} fill="#DCDCDC" stroke="#555" strokeWidth={0.8}/>
+        <line x1={20} y1={10} x2={20} y2={30} stroke="#999" strokeWidth={0.6}/>
+      </svg>
+    ),
+    'site-fence': (
+      <svg width={s} height={s} viewBox="0 0 40 40">
+        <line x1={2} y1={20} x2={38} y2={20} stroke="#333" strokeWidth={1.4}/>
+        {[2,14,26,38].map(x => <line key={x} x1={x} y1={15} x2={x} y2={25} stroke="#333" strokeWidth={1.4}/>)}
+      </svg>
+    ),
+    'site-retaining-wall': (
+      <svg width={s} height={s} viewBox="0 0 40 40">
+        <rect x={2} y={14} width={36} height={12} fill="#8B8378" stroke="#333" strokeWidth={1}/>
+        {[6,14,22,30].map(x => <line key={x} x1={x} y1={14} x2={x+6} y2={26} stroke="rgba(0,0,0,0.3)" strokeWidth={0.5}/>)}
+      </svg>
+    ),
+    'site-deck-patio': (
+      <svg width={s} height={s} viewBox="0 0 40 40">
+        <rect x={3} y={5} width={34} height={30} fill="#E8DCC8" stroke="#555" strokeWidth={0.8}/>
+        {[11,17,23,29].map(y => <line key={y} x1={3} y1={y} x2={37} y2={y} stroke="#B8A888" strokeWidth={0.6}/>)}
+      </svg>
+    ),
+    'site-water-service': (
+      <svg width={s} height={s} viewBox="0 0 40 40">
+        <line x1={2} y1={20} x2={38} y2={20} stroke="#2A5FA5" strokeWidth={1.4} strokeDasharray="5,2"/>
+        <text x={20} y={13} textAnchor="middle" fontSize="8" fontWeight="bold" fill="#2A5FA5" fontFamily="sans-serif">W</text>
+      </svg>
+    ),
+    'site-sewer-lateral': (
+      <svg width={s} height={s} viewBox="0 0 40 40">
+        <line x1={2} y1={20} x2={38} y2={20} stroke="#6B4423" strokeWidth={1.4} strokeDasharray="5,2"/>
+        <text x={20} y={13} textAnchor="middle" fontSize="7" fontWeight="bold" fill="#6B4423" fontFamily="sans-serif">SS</text>
+      </svg>
+    ),
+    'site-gas-service': (
+      <svg width={s} height={s} viewBox="0 0 40 40">
+        <line x1={2} y1={20} x2={38} y2={20} stroke="#B8860B" strokeWidth={1.4} strokeDasharray="5,2"/>
+        <text x={20} y={13} textAnchor="middle" fontSize="8" fontWeight="bold" fill="#B8860B" fontFamily="sans-serif">G</text>
+      </svg>
+    ),
+    'site-electrical-service': (
+      <svg width={s} height={s} viewBox="0 0 40 40">
+        <polygon points="20,6 33,28 7,28" fill="white" stroke="#333" strokeWidth={1.2}/>
+        <text x={20} y={35} textAnchor="middle" fontSize="6" fill="#333" fontFamily="sans-serif">ELEC</text>
+      </svg>
+    ),
+
+    // ── Structural ──
+    'structural-foundation-wall': (
+      <svg width={s} height={s} viewBox="0 0 40 40">
+        <rect x={2} y={14} width={36} height={12} fill="#9A9A9A" stroke="#111" strokeWidth={0.8}/>
+        {[6,14,22,30].map(x => <line key={x} x1={x} y1={14} x2={x+6} y2={26} stroke="rgba(0,0,0,0.25)" strokeWidth={0.5}/>)}
+      </svg>
+    ),
   }
 
   return (
-    <div className="flex items-center justify-center w-10 h-10 shrink-0">
-      {thumb[bloxId] ?? (
+    <div className="blox-preview flex items-center justify-center w-10 h-10 shrink-0">
+      {(/^(furniture|fixture|casework)-/.test(bloxId) ? styleFurniturePreview(thumb[bloxId]) : thumb[bloxId]) ?? (
         <div className="w-8 h-8 bg-gray-500 rounded" />
       )}
     </div>
@@ -1285,9 +1715,10 @@ export function BloxItem({ def }: BloxItemProps) {
 
   return (
     <button
+      aria-pressed={isActive}
       onClick={() => setActiveBlox(isActive ? null : def.id)}
       className={`
-        w-full flex items-center gap-2 px-2 py-1.5 rounded text-left transition-colors
+        blox-card w-full flex items-center gap-2 px-2 py-1.5 rounded text-left transition-colors
         ${isActive
           ? 'bg-accent text-white'
           : 'text-gray-300 hover:bg-sidebar-hover hover:text-white'

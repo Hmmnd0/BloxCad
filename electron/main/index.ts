@@ -199,14 +199,14 @@ function startMcpBridge(win: BrowserWindow) {
 }
 
 function buildImagePDF(jpegBuf: Buffer, imgW: number, imgH: number): Buffer {
-  // Scale image to fill Letter landscape (792 x 612 pt) while preserving aspect ratio
-  const pageW = 792
-  const pageH = 612
-  const scale = Math.min(pageW / imgW, pageH / imgH)
-  const drawW = Math.round(imgW * scale)
-  const drawH = Math.round(imgH * scale)
-  const offsetX = Math.round((pageW - drawW) / 2)
-  const offsetY = Math.round((pageH - drawH) / 2)
+  // Print compositor uses 96 CSS px/in at 3x raster resolution (288 dpi).
+  // Preserve its actual page size: never shrink a scaled plan onto Letter.
+  const pageW = imgW / 4
+  const pageH = imgH / 4
+  const drawW = pageW
+  const drawH = pageH
+  const offsetX = 0
+  const offsetY = 0
 
   const parts: Buffer[] = []
   const offsets: number[] = []
@@ -329,6 +329,34 @@ app.whenReady().then(() => {
     const pdfBuf = buildImagePDF(jpegBuf, imgWidth as number, imgHeight as number)
     writeFileSync(filePath, pdfBuf)
     return { success: true }
+  })
+
+  ipcMain.handle('export-permit-pdf',async(_,{html,defaultName})=>{
+    if(typeof html!=='string'||html.length>100_000_000)throw new Error('Invalid permit sheet')
+    const {canceled,filePath}=await dialog.showSaveDialog({defaultPath:`${String(defaultName)}-permit.pdf`,filters:[{name:'PDF Document',extensions:['pdf']}]})
+    if(canceled||!filePath)return {success:false}
+    const win=new BrowserWindow({show:false,webPreferences:{sandbox:true,contextIsolation:true,nodeIntegration:false,javascript:false,partition:`permit-${randomUUID()}`}})
+    win.webContents.setWindowOpenHandler(()=>({action:'deny'}))
+    win.webContents.on('will-navigate',event=>event.preventDefault())
+    try {
+      const csp=`<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'">`
+      await win.loadURL('data:text/html;charset=utf-8,'+encodeURIComponent(html.replace('<head>','<head>'+csp)))
+      const pdf=await win.webContents.printToPDF({printBackground:true,preferCSSPageSize:true})
+      writeFileSync(filePath,pdf)
+      return {success:true}
+    } finally {win.destroy()}
+  })
+
+  ipcMain.handle('export-svg', async (_, { svg, defaultName }) => {
+    const { canceled, filePath } = await dialog.showSaveDialog({
+      defaultPath: `${defaultName}.svg`,
+      filters: [{ name: 'SVG Image', extensions: ['svg'] }]
+    })
+    if (!canceled && filePath) {
+      writeFileSync(filePath, svg, 'utf-8')
+      return { success: true }
+    }
+    return { success: false }
   })
 
   ipcMain.handle('open-project', async () => {

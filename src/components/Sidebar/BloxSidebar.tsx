@@ -5,6 +5,7 @@ import { BloxItem } from './BloxItem'
 import { LayersPanel } from './LayersPanel'
 import { UnderlayPanel } from './UnderlayPanel'
 import { useStore } from '../../store/useStore'
+import { Search, Library, ChevronDown, ChevronRight } from 'lucide-react'
 
 const CATEGORY_ICONS: Record<string, string> = {
   Walls: '▪',
@@ -30,14 +31,15 @@ function CategorySection({ category }: { category: BloxCategory }) {
     <div className="mb-1">
       <button
         onClick={() => setOpen(o => !o)}
-        className="w-full flex items-center gap-2 px-3 py-1.5 text-gray-400 hover:text-gray-200 text-xs font-semibold uppercase tracking-wider transition-colors"
+        aria-expanded={open}
+        className="library-category w-full flex items-center gap-2 px-3 py-1.5 text-gray-400 hover:text-gray-200 text-xs font-semibold uppercase tracking-wider transition-colors"
       >
-        <span className="text-sm">{CATEGORY_ICONS[category] ?? '▸'}</span>
         <span>{category}</span>
-        <span className="ml-auto">{open ? '▾' : '▸'}</span>
+        <span className="category-count">{items.length}</span>
+        <span className="ml-auto">{open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}</span>
       </button>
       {open && (
-        <div className="px-1 space-y-0.5">
+        <div className="library-grid">
           {items.map(def => (
             <BloxItem key={def.id} def={def} />
           ))}
@@ -94,20 +96,24 @@ function SuggestionBanner() {
 
 export function BloxSidebar() {
   const [search, setSearch] = useState('')
+  const [categoryFilter, setCategoryFilter] = useState('all')
   const [tab, setTab] = useState<SidebarTab>('library')
   const project = useStore(s => s.project)
   const mode = project?.mode ?? 'floorplan'
-  const activeCategories = mode === 'elevation' ? ELEVATION_CATEGORIES : mode === 'detail' ? DETAIL_CATEGORIES : FLOORPLAN_CATEGORIES
+  const activeCategories: readonly BloxCategory[] = mode === 'elevation' ? ELEVATION_CATEGORIES : mode === 'detail' ? DETAIL_CATEGORIES : FLOORPLAN_CATEGORIES
 
   const filtered = search.trim()
     ? BLOX_DEFINITIONS.filter(d =>
-        d.name.toLowerCase().includes(search.toLowerCase()) ||
-        d.description.toLowerCase().includes(search.toLowerCase())
+        activeCategories.includes(d.category) &&
+        (categoryFilter === 'all' || !activeCategories.includes(categoryFilter as BloxCategory) || d.category === categoryFilter) &&
+        (d.name.toLowerCase().includes(search.trim().toLowerCase()) ||
+        d.description.toLowerCase().includes(search.trim().toLowerCase()))
       )
     : null
 
   return (
-    <div className="w-60 flex flex-col bg-sidebar border-l border-gray-700 select-none">
+    <aside className="blox-library flex flex-col bg-sidebar border-l border-gray-700 select-none" aria-label="Blox library">
+      <div className="library-heading"><Library size={18} /><div><h2>Design library</h2><p>Every detail starts here.</p></div></div>
       {/* Tabs */}
       <div className="flex border-b border-gray-700 shrink-0">
         {(['library', 'layers', 'underlay'] as SidebarTab[]).map(t => (
@@ -130,10 +136,12 @@ export function BloxSidebar() {
       ) : (
         <>
           {/* Search */}
-          <div className="px-3 py-2 border-b border-gray-700">
+          <div className="library-search px-3 py-2">
+            <Search size={15} />
             <input
               type="text"
-              placeholder="Search blox..."
+              placeholder="Search walls, doors, fixtures…"
+              aria-label="Search blox"
               value={search}
               onChange={e => setSearch(e.target.value)}
               className="w-full bg-gray-800 text-gray-200 text-xs px-2 py-1.5 rounded border border-gray-600 focus:border-accent focus:outline-none placeholder-gray-500"
@@ -141,27 +149,34 @@ export function BloxSidebar() {
           </div>
 
           {/* Shortcut hint */}
-          <div className="px-3 py-1 text-[10px] text-gray-600 border-b border-gray-700">
-            Click to select · Click canvas to place · ESC to cancel · R to rotate
+          <div className="library-filter">
+            <label htmlFor="library-category">Category</label>
+            <select id="library-category" value={activeCategories.includes(categoryFilter as BloxCategory) ? categoryFilter : 'all'} onChange={e => setCategoryFilter(e.target.value)}>
+              <option value="all">All categories</option>
+              {activeCategories.map(category => <option key={category} value={category}>{category}</option>)}
+            </select>
+          </div>
+          <div className="library-hint">
+            Select a blox, then place it on your plan.<br /><kbd>Esc</kbd> Cancel <kbd>R</kbd> Rotate
           </div>
 
           {/* Blox list */}
           <div className="flex-1 overflow-y-auto py-1 scrollbar-thin">
             {filtered ? (
-              <div className="px-1 space-y-0.5">
+              <div className="library-grid">
                 {filtered.length === 0
                   ? <p className="text-gray-500 text-xs px-2 py-4 text-center">No results</p>
                   : filtered.map(def => <BloxItem key={def.id} def={def} />)
                 }
               </div>
             ) : (
-              activeCategories.map(cat => (
+              activeCategories.filter(cat => categoryFilter === 'all' || !activeCategories.includes(categoryFilter as BloxCategory) || cat === categoryFilter).map(cat => (
                 <CategorySection key={cat} category={cat as BloxCategory} />
               ))
             )}
           </div>
         </>
       )}
-    </div>
+    </aside>
   )
 }

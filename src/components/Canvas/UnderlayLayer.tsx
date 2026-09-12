@@ -11,6 +11,8 @@ function computeRenderSize(u: Underlay, pixelsPerFoot: number): { w: number; h: 
     widthFt = naturalWidth / pixelsPerFoot
   } else if (calibration.method === 'simple') {
     widthFt = calibration.realWidthFt
+  } else if (calibration.method === 'multi-point') {
+    widthFt = naturalWidth / calibration.pixelsPerFoot
   } else {
     const distPx = Math.hypot(calibration.p2px.x - calibration.p1px.x, calibration.p2px.y - calibration.p1px.y)
     const pxPerFtImg = distPx / calibration.realDistFt
@@ -44,13 +46,20 @@ export function UnderlayLayer({ pixelsPerFoot }: Props) {
   if (!underlay || !underlay.visible || !htmlImage) return null
 
   const { w, h } = computeRenderSize(underlay, pixelsPerFoot)
+  const reg=underlay.registration
+  const imageScale=reg?.scaleFtPerPx ?? (w/(underlay.naturalWidth*pixelsPerFoot))
+  const imageW=underlay.naturalWidth*imageScale*pixelsPerFoot
+  const imageH=underlay.naturalHeight*imageScale*pixelsPerFoot
+  const imageX=reg ? (reg.originFt.x-reg.originPx.x*imageScale)*pixelsPerFoot : 0
+  const imageY=reg ? (reg.originFt.y-reg.originPx.y*imageScale)*pixelsPerFoot : 0
 
   return (
     <Layer listening={false} name="underlay">
       <KonvaImage
         image={htmlImage}
-        x={0} y={0}
-        width={w} height={h}
+        x={imageX} y={imageY}
+        width={reg?imageW:w} height={reg?imageH:h}
+        rotation={reg?.rotationDeg ?? 0}
         opacity={underlay.opacity}
         listening={false}
         perfectDrawEnabled={false}
@@ -59,8 +68,8 @@ export function UnderlayLayer({ pixelsPerFoot }: Props) {
       {calibrationPoints.map((pt, i) => (
         <Circle
           key={i}
-          x={(pt.x / underlay.naturalWidth) * w}
-          y={(pt.y / underlay.naturalHeight) * h}
+          x={reg ? imageX + pt.x*imageScale*pixelsPerFoot : (pt.x / underlay.naturalWidth) * w}
+          y={reg ? imageY + pt.y*imageScale*pixelsPerFoot : (pt.y / underlay.naturalHeight) * h}
           radius={6}
           fill="#FF4444"
           stroke="white"

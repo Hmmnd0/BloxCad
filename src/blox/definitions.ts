@@ -1,6 +1,8 @@
 import { BloxDefinition } from '../types'
+import { DEMOLITION_BLOX } from './demolition'
 
 export const BLOX_DEFINITIONS: BloxDefinition[] = [
+  ...DEMOLITION_BLOX,
   // ── WALLS ────────────────────────────────────────────────────────────────
   {
     id: 'wall-exterior',
@@ -38,6 +40,18 @@ export const BLOX_DEFINITIONS: BloxDefinition[] = [
     minWidth: 1,
     widthPresets: [4, 6, 8, 10, 12, 16, 20]
   },
+  {
+    id: 'wall-cmu-footing',
+    name: 'CMU Wall w/ Footing (Plan)',
+    category: 'Walls',
+    description: '8" CMU foundation wall shown with its continuous strip footing in plan — dashed/hatched footing band (20" wide) wider than the wall, standard foundation-plan convention. Use for foundation plans instead of plain wall-cmu.',
+    defaultWidth: 8,
+    defaultHeight: 1.667,
+    isResizable: true,
+    resizeAxis: 'x',
+    minWidth: 1,
+    widthPresets: [4, 6, 8, 10, 12, 16, 20]
+  },
 
   {
     id: 'wall-glazing',
@@ -50,7 +64,7 @@ export const BLOX_DEFINITIONS: BloxDefinition[] = [
     resizeAxis: 'x',
     minWidth: 1,
     widthPresets: [3, 4, 6, 8, 10, 12, 16],
-    placementNote: 'Height is glass thickness (0.25ft). Place at same x,y as adjacent wall. Width = glazed opening width.'
+    placementNote: 'Default height is a 0.375ft plan-envelope depth, not glass pane thickness. Width is the glazed run. Mullions are symbolic; verify the selected glazing system dimensions.'
   },
 
   {
@@ -171,6 +185,19 @@ export const BLOX_DEFINITIONS: BloxDefinition[] = [
     minWidth: 1,
     minHeight: 2.25,
     placementNote: 'Standard brick nominal depth: 3⅝" (3.625"). Each course is 2¼" (2.25") tall including mortar joint. Place against exterior sheathing with 1" air gap. Courses shown with horizontal mortar lines and alternating head joints.'
+  },
+  {
+    id: 'detail-cmu-block',
+    name: 'CMU Block (Section)',
+    category: 'Details',
+    description: 'Concrete masonry unit wall in cross-section — coursed block with mortar bed joints, 8" nominal course height',
+    defaultWidth: 8,
+    defaultHeight: 60,
+    isResizable: true,
+    resizeAxis: 'both',
+    minWidth: 4,
+    minHeight: 8,
+    placementNote: 'Width = block thickness (nominal 8" typical, also 4"/6"/12"). Height = wall run shown; use a break line for walls taller than the sheet allows. Mortar bed joints drawn at 8" nominal course spacing.'
   },
   {
     id: 'detail-stud-2x4-face',
@@ -623,6 +650,7 @@ export const BLOX_DEFINITIONS: BloxDefinition[] = [
     name: 'Straight Stairs',
     category: 'Stairs',
     description: '3\'0" wide straight stair run',
+    placementNote: 'Single straight flight. Physical properties: stairRiseFt (total rise in ft), stairRiserCount (integer 2–64), stairHeadroomIn (minimum vertical headroom in inches), stairClearWidthIn (clear width above handrails in inches), stairReviewProfile (irc-2021-straight, only if applicable). Plan long dimension is horizontal run excluding landings. N risers generate N−1 treads; legacy stepCount is decorative only when physical risers are absent. MCP stairDesign returns calculations and get_project.stairReview returns measured/unverified findings. UP points toward local top for portrait and right for landscape; directionCue includes flips and rotation. No automatic code approval.',
     defaultWidth: 3,
     defaultHeight: 10,
     isResizable: true,
@@ -659,6 +687,7 @@ export const BLOX_DEFINITIONS: BloxDefinition[] = [
     name: 'Hatch Stair',
     category: 'Stairs',
     description: 'Floor hatch opening with suspended stair — stair descends through slab',
+    placementNote: 'DN arrow points toward local bottom for portrait, right for landscape; flips and rotation transform it. properties.stepCount sets displayed steps (2–64). Hatch outline is schematic, not a structural opening design.',
     defaultWidth: 3,
     defaultHeight: 6,
     isResizable: true,
@@ -684,7 +713,8 @@ export const BLOX_DEFINITIONS: BloxDefinition[] = [
     id: 'fixture-elevator',
     name: 'Elevator',
     category: 'Stairs',
-    description: "Passenger elevator shaft — standard 7'×7' cab footprint with door indicator",
+    description: "Passenger elevator plan symbol — nominal 7'×7' footprint with door indicator",
+    placementNote: 'Schematic shaft/cab symbol, not manufacturer-specific clearances. Confirm hoistway, cab and door dimensions with the selected elevator supplier.',
     defaultWidth: 7,
     defaultHeight: 7,
     isResizable: true,
@@ -696,7 +726,8 @@ export const BLOX_DEFINITIONS: BloxDefinition[] = [
     id: 'fixture-ramp',
     name: 'Ramp',
     category: 'Stairs',
-    description: "Accessible ramp — 5' wide, slope arrow from low to high end",
+    description: "Ramp plan symbol — 5' nominal width, UP arrow from low to high end",
+    placementNote: 'Symbol does not establish accessibility compliance. Verify slope, clear width, landings and handrails. UP points toward local bottom for portrait, right for landscape; MCP directionCue includes flips and rotation.',
     defaultWidth: 5,
     defaultHeight: 10,
     isResizable: true,
@@ -831,17 +862,6 @@ export const BLOX_DEFINITIONS: BloxDefinition[] = [
     isResizable: false,
     resizeAxis: 'none',
     placement: { wallFaceEdge: 'top', intoRoom: 2.25, clearanceFront: 1.5, validRotations: [0, 90, 180, 270], typicalRooms: ['laundry', 'utility'] }
-  },
-  {
-    id: 'fixture-water-heater',
-    name: 'Water Heater',
-    category: 'Fixtures',
-    description: '18" diameter tank water heater',
-    defaultWidth: 1.5,
-    defaultHeight: 1.5,
-    isResizable: false,
-    resizeAxis: 'none',
-    placement: { wallFaceEdge: 'top', intoRoom: 1.5, clearanceFront: 0.5, validRotations: [0, 90, 180, 270], typicalRooms: ['utility', 'mechanical'] }
   },
   {
     id: 'fixture-utility-sink',
@@ -1139,6 +1159,18 @@ export const BLOX_DEFINITIONS: BloxDefinition[] = [
     description: '12" diameter round column',
     defaultWidth: 1,
     defaultHeight: 1,
+    isResizable: true,
+    resizeAxis: 'both',
+    minWidth: 0.5,
+    minHeight: 0.5
+  },
+  {
+    id: 'shape-rect',
+    name: 'Generic Rectangle',
+    category: 'Structural',
+    description: 'Unlabeled outline rectangle — use for sump pits, window wells, slab steps, or any footprint not covered by a dedicated blox. Label with a leader or text note.',
+    defaultWidth: 2,
+    defaultHeight: 2,
     isResizable: true,
     resizeAxis: 'both',
     minWidth: 0.5,
@@ -1776,6 +1808,11 @@ export const BLOX_DEFINITIONS: BloxDefinition[] = [
     resizeAxis: 'none'
   },
   {
+    id:'annotation-window-tag',name:'Window Tag',category:'Annotations',
+    description:'Diamond window mark linked to a plan window and its schedule.',
+    defaultWidth:1.5,defaultHeight:1.5,isResizable:false,resizeAxis:'none'
+  },
+  {
     id: 'annotation-section-ref',
     name: 'Section Reference',
     category: 'Annotations',
@@ -1919,13 +1956,38 @@ export const BLOX_DEFINITIONS: BloxDefinition[] = [
     id: 'site-property-line',
     name: 'Property Line',
     category: 'Site',
-    description: 'Property / setback line — long-dash dot-dash pattern with "PL" label',
+    description: 'Lot boundary line — long-dash dot-dash pattern with "PL" label, optional surveyor bearing (properties.bearing) and a front/side/rear role (properties.lineType) used by the DRC setback check',
     defaultWidth: 50,
     defaultHeight: 1,
     isResizable: true,
     resizeAxis: 'x',
     minWidth: 5,
     widthPresets: [25, 50, 100, 150, 200]
+  },
+  {
+    id: 'site-setback-line',
+    name: 'Setback Line',
+    category: 'Site',
+    description: 'Zoning building-setback line — fine dashed offset line showing where the buildable envelope starts, labeled with the required setback distance (properties.setbackFt, default 10)',
+    defaultWidth: 50,
+    defaultHeight: 1,
+    isResizable: true,
+    resizeAxis: 'x',
+    minWidth: 5,
+    widthPresets: [25, 50, 100, 150, 200]
+  },
+  {
+    id: 'site-easement',
+    name: 'Easement',
+    category: 'Site',
+    description: 'Utility / drainage / access easement — hatched band with a centered label (properties.easementType, default "Utility")',
+    defaultWidth: 40,
+    defaultHeight: 10,
+    isResizable: true,
+    resizeAxis: 'both',
+    minWidth: 5,
+    minHeight: 2,
+    widthPresets: [20, 40, 80]
   },
   {
     id: 'site-sidewalk',
@@ -1952,13 +2014,647 @@ export const BLOX_DEFINITIONS: BloxDefinition[] = [
     minWidth: 10,
     widthPresets: [20, 40, 80, 120]
   },
+
+  // ── ELECTRICAL ──────────────────────────────────────────────────────────
+  {
+    id: 'elec-panel',
+    name: 'Electrical Panel',
+    category: 'Electrical',
+    description: 'Main/sub breaker panel — wall-mounted. NEC 110.26 requires 30" wide × 36" deep clear working space centered on the panel, unobstructed floor-to-ceiling.',
+    defaultWidth: 1.5,
+    defaultHeight: 0.5,
+    isResizable: true,
+    resizeAxis: 'x',
+    minWidth: 1,
+    widthPresets: [1.33, 1.5, 2]
+  },
+  {
+    id: 'elec-meter',
+    name: 'Electrical Meter',
+    category: 'Electrical',
+    description: 'Utility electric meter — exterior wall-mounted, typically near the service panel',
+    defaultWidth: 1,
+    defaultHeight: 0.5,
+    isResizable: false,
+    resizeAxis: 'none'
+  },
+  {
+    id: 'elec-outlet',
+    name: 'Duplex Outlet',
+    category: 'Electrical',
+    description: 'Standard 120V duplex receptacle. IRC E3901: no point along a wall may be more than 6ft from an outlet (12ft max spacing).',
+    defaultWidth: 0.4,
+    defaultHeight: 0.4,
+    isResizable: false,
+    resizeAxis: 'none'
+  },
+  {
+    id: 'elec-outlet-gfci',
+    name: 'GFCI Outlet',
+    category: 'Electrical',
+    description: 'Ground-fault protected receptacle. IRC E3902 requires GFCI at kitchen counters, baths, garages, outdoors, crawlspaces/unfinished basements, and within 6ft of any sink.',
+    defaultWidth: 0.4,
+    defaultHeight: 0.4,
+    isResizable: false,
+    resizeAxis: 'none'
+  },
+  {
+    id: 'elec-switch',
+    name: 'Light Switch',
+    category: 'Electrical',
+    description: 'Single-pole wall switch',
+    defaultWidth: 0.3,
+    defaultHeight: 0.3,
+    isResizable: false,
+    resizeAxis: 'none'
+  },
+  {
+    id: 'elec-light-ceiling',
+    name: 'Ceiling Light',
+    category: 'Electrical',
+    description: 'Ceiling-mounted light fixture (surface or flush-mount)',
+    defaultWidth: 1,
+    defaultHeight: 1,
+    isResizable: false,
+    resizeAxis: 'none'
+  },
+
+  // ── MECHANICAL ──────────────────────────────────────────────────────────
+  {
+    id: 'mech-furnace',
+    name: 'Furnace / Air Handler',
+    category: 'Mechanical',
+    description: 'Forced-air furnace or air handler unit. IRC M1305 requires a clear, unobstructed passageway ≥24" wide (≥30"×30" work platform in front of the service side) to access the appliance.',
+    defaultWidth: 2,
+    defaultHeight: 2.5,
+    isResizable: true,
+    resizeAxis: 'both',
+    minWidth: 1.5,
+    minHeight: 1.5
+  },
+  {
+    id: 'mech-condenser',
+    name: 'AC Condenser',
+    category: 'Mechanical',
+    description: 'Outdoor air-conditioning condenser unit, pad-mounted. Keep clear of dryer vents and ≥1ft off the foundation for service access; verify manufacturer clearance.',
+    defaultWidth: 2.5,
+    defaultHeight: 2.5,
+    isResizable: true,
+    resizeAxis: 'both',
+    minWidth: 2,
+    minHeight: 2
+  },
+  {
+    id: 'mech-register-supply',
+    name: 'Supply Register',
+    category: 'Mechanical',
+    description: 'Supply air duct register/diffuser (floor, wall, or ceiling)',
+    defaultWidth: 1,
+    defaultHeight: 0.5,
+    isResizable: true,
+    resizeAxis: 'x',
+    minWidth: 0.5,
+    widthPresets: [0.83, 1, 1.5]
+  },
+  {
+    id: 'mech-register-return',
+    name: 'Return Air Grille',
+    category: 'Mechanical',
+    description: 'Return air grille — typically larger than supply registers',
+    defaultWidth: 1.67,
+    defaultHeight: 1,
+    isResizable: true,
+    resizeAxis: 'both',
+    minWidth: 1,
+    minHeight: 0.5
+  },
+  {
+    id: 'mech-thermostat',
+    name: 'Thermostat',
+    category: 'Mechanical',
+    description: 'Wall-mounted thermostat — placed on an interior wall, away from direct sun/supply registers per manufacturer guidance',
+    defaultWidth: 0.35,
+    defaultHeight: 0.35,
+    isResizable: false,
+    resizeAxis: 'none'
+  },
+
+  // ── PLUMBING ────────────────────────────────────────────────────────────
+  {
+    id: 'plumb-water-heater',
+    name: 'Water Heater',
+    category: 'Plumbing',
+    description: 'Tank or tankless water heater. IRC P2801 requires a temperature/pressure relief valve with discharge piped to within 6" of the floor or to the exterior; provide clear service access.',
+    defaultWidth: 1.5,
+    defaultHeight: 1.5,
+    isResizable: true,
+    resizeAxis: 'both',
+    minWidth: 1.33,
+    minHeight: 1.33,
+    placement: { wallFaceEdge: 'top', intoRoom: 1.5, clearanceFront: 0.5, validRotations: [0, 90, 180, 270], typicalRooms: ['utility', 'mechanical'] }
+  },
+  {
+    id: 'plumb-cleanout',
+    name: 'Sewer Cleanout',
+    category: 'Plumbing',
+    description: 'DWV cleanout access point — locate where accessible (not buried under finished work) per IRC P3005',
+    defaultWidth: 0.5,
+    defaultHeight: 0.5,
+    isResizable: false,
+    resizeAxis: 'none'
+  },
+  {
+    id: 'plumb-gas-meter',
+    name: 'Gas Meter',
+    category: 'Plumbing',
+    description: 'Utility gas meter — exterior wall-mounted, keep clear of ignition sources and vehicle traffic per IFGC/utility standards',
+    defaultWidth: 1.5,
+    defaultHeight: 1,
+    isResizable: false,
+    resizeAxis: 'none'
+  },
+  {
+    id: 'plumb-hose-bibb',
+    name: 'Hose Bibb',
+    category: 'Plumbing',
+    description: 'Exterior hose bibb / sillcock. IRC P2902 requires a vacuum-breaker backflow preventer.',
+    defaultWidth: 0.3,
+    defaultHeight: 0.3,
+    isResizable: false,
+    resizeAxis: 'none'
+  },
+
+  // ── MECHANICAL (additional) ────────────────────────────────────────────
+  {
+    id: 'mech-exhaust-fan-bath',
+    name: 'Bath Exhaust Fan',
+    category: 'Mechanical',
+    description: 'Ceiling-mounted bathroom exhaust fan, ducted to the exterior. IRC M1507 — required in bathrooms without a window, or in addition to a window per local amendment.',
+    defaultWidth: 1,
+    defaultHeight: 1,
+    isResizable: false,
+    resizeAxis: 'none'
+  },
+  {
+    id: 'mech-range-hood',
+    name: 'Range Hood',
+    category: 'Mechanical',
+    description: 'Over-range kitchen exhaust hood, ducted to the exterior. IRC M1503 — makeup air required for exhaust ≥400 CFM.',
+    defaultWidth: 2.5,
+    defaultHeight: 1.5,
+    isResizable: true,
+    resizeAxis: 'x',
+    minWidth: 2,
+    widthPresets: [2, 2.5, 3, 3.5]
+  },
+  {
+    id: 'mech-duct-supply',
+    name: 'Supply Duct',
+    category: 'Mechanical',
+    description: 'Supply air trunk/branch duct run',
+    defaultWidth: 4,
+    defaultHeight: 1,
+    isResizable: true,
+    resizeAxis: 'both',
+    minWidth: 1,
+    minHeight: 0.5,
+    widthPresets: [4, 8, 12, 20]
+  },
+  {
+    id: 'mech-duct-return',
+    name: 'Return Duct',
+    category: 'Mechanical',
+    description: 'Return air trunk/branch duct run',
+    defaultWidth: 6,
+    defaultHeight: 1.5,
+    isResizable: true,
+    resizeAxis: 'both',
+    minWidth: 1,
+    minHeight: 0.5,
+    widthPresets: [6, 10, 16, 20]
+  },
+  {
+    id: 'mech-minisplit',
+    name: 'Mini-Split Head',
+    category: 'Mechanical',
+    description: 'Wall-mounted ductless mini-split indoor unit',
+    defaultWidth: 3,
+    defaultHeight: 1,
+    isResizable: true,
+    resizeAxis: 'x',
+    minWidth: 2,
+    widthPresets: [2.5, 3, 3.5]
+  },
+  {
+    id: 'mech-erv',
+    name: 'ERV / HRV Unit',
+    category: 'Mechanical',
+    description: 'Energy/heat recovery ventilator — IRC M1505 whole-house mechanical ventilation, required when the envelope tests tighter than 5 ACH50.',
+    defaultWidth: 2,
+    defaultHeight: 2,
+    isResizable: true,
+    resizeAxis: 'both',
+    minWidth: 1.5,
+    minHeight: 1.5
+  },
+  {
+    id: 'mech-dryer-vent-cap',
+    name: 'Dryer Vent Cap',
+    category: 'Mechanical',
+    description: 'Exterior wall termination cap for clothes dryer exhaust. IRC M1502 — max developed duct length 35ft (reduced per fitting), smooth metal duct only.',
+    defaultWidth: 0.5,
+    defaultHeight: 0.5,
+    isResizable: false,
+    resizeAxis: 'none'
+  },
+
+  // ── PLUMBING (additional) ──────────────────────────────────────────────
+  {
+    id: 'plumb-roof-vent',
+    name: 'Roof Vent (VTR)',
+    category: 'Plumbing',
+    description: 'DWV vent-through-roof termination. IRC P3103 — terminates ≥6" above roof, ≥10ft from (or ≥3ft above) any openable window/door/opening within 10ft.',
+    defaultWidth: 0.5,
+    defaultHeight: 0.5,
+    isResizable: false,
+    resizeAxis: 'none'
+  },
+  {
+    id: 'plumb-floor-drain',
+    name: 'Floor Drain',
+    category: 'Plumbing',
+    description: 'Floor drain with trap primer — basements, laundry, mechanical rooms',
+    defaultWidth: 0.5,
+    defaultHeight: 0.5,
+    isResizable: false,
+    resizeAxis: 'none'
+  },
+  {
+    id: 'plumb-sump-pump',
+    name: 'Sump Pump',
+    category: 'Plumbing',
+    description: 'Sump pit and pump — foundation drainage / below-grade discharge',
+    defaultWidth: 2,
+    defaultHeight: 2,
+    isResizable: true,
+    resizeAxis: 'both',
+    minWidth: 1.5,
+    minHeight: 1.5
+  },
+  {
+    id: 'plumb-water-softener',
+    name: 'Water Softener',
+    category: 'Plumbing',
+    description: 'Water softener / filtration tank, typically installed at the main supply line entry',
+    defaultWidth: 1.5,
+    defaultHeight: 1.5,
+    isResizable: true,
+    resizeAxis: 'both',
+    minWidth: 1,
+    minHeight: 1
+  },
+  {
+    id: 'plumb-shutoff-valve',
+    name: 'Main Shutoff Valve',
+    category: 'Plumbing',
+    description: 'Main water supply shutoff valve — locate accessible, near the point of entry',
+    defaultWidth: 0.4,
+    defaultHeight: 0.4,
+    isResizable: false,
+    resizeAxis: 'none'
+  },
+  {
+    id: 'plumb-washer-box',
+    name: 'Washer Supply/Drain Box',
+    category: 'Plumbing',
+    description: 'Recessed washing-machine supply valves and standpipe box',
+    defaultWidth: 1,
+    defaultHeight: 1,
+    isResizable: false,
+    resizeAxis: 'none'
+  },
+
+  // ── ELECTRICAL (additional) ────────────────────────────────────────────
+  {
+    id: 'elec-light-recessed',
+    name: 'Recessed Light',
+    category: 'Electrical',
+    description: 'Recessed can/downlight, ceiling-mounted',
+    defaultWidth: 0.5,
+    defaultHeight: 0.5,
+    isResizable: false,
+    resizeAxis: 'none'
+  },
+  {
+    id: 'elec-light-exterior',
+    name: 'Exterior Light',
+    category: 'Electrical',
+    description: 'Wall-mounted exterior/porch light fixture',
+    defaultWidth: 0.6,
+    defaultHeight: 0.6,
+    isResizable: false,
+    resizeAxis: 'none'
+  },
+  {
+    id: 'elec-ceiling-fan',
+    name: 'Ceiling Fan',
+    category: 'Electrical',
+    description: 'Ceiling fan, with or without integrated light',
+    defaultWidth: 3.5,
+    defaultHeight: 3.5,
+    isResizable: true,
+    resizeAxis: 'both',
+    minWidth: 3,
+    minHeight: 3
+  },
+  {
+    id: 'elec-outlet-240v',
+    name: '240V Outlet',
+    category: 'Electrical',
+    description: 'Dedicated 240V receptacle — dryer (NEMA 14-30) or range (NEMA 14-50)',
+    defaultWidth: 0.5,
+    defaultHeight: 0.5,
+    isResizable: false,
+    resizeAxis: 'none'
+  },
+  {
+    id: 'elec-disconnect',
+    name: 'AC Disconnect',
+    category: 'Electrical',
+    description: 'Exterior disconnect switch at the condensing unit. NEC 440 requires a disconnecting means within sight of AC/refrigeration equipment.',
+    defaultWidth: 1,
+    defaultHeight: 1,
+    isResizable: false,
+    resizeAxis: 'none'
+  },
+  {
+    id: 'elec-doorbell',
+    name: 'Doorbell',
+    category: 'Electrical',
+    description: 'Doorbell button/chime',
+    defaultWidth: 0.25,
+    defaultHeight: 0.25,
+    isResizable: false,
+    resizeAxis: 'none'
+  },
+  {
+    id: 'elec-conduit',
+    name: 'Conduit Run',
+    category: 'Electrical',
+    description: 'EMT/rigid conduit raceway run. Draw with the Conduit tool (like the Wall tool) or resize a placed segment directly.',
+    defaultWidth: 4,
+    defaultHeight: 0.15,
+    isResizable: true,
+    resizeAxis: 'both',
+    minWidth: 0.5,
+    minHeight: 0.08
+  },
+  {
+    id: 'elec-circuit-wire',
+    name: 'Circuit Wiring',
+    category: 'Electrical',
+    description: 'Switch-to-fixture wiring path (control relationship, not a physical raceway) — drawn as a curved line per standard residential electrical plan convention. Draw with the Circuit Wire tool (like the Wall tool) or resize a placed segment directly.',
+    defaultWidth: 4,
+    defaultHeight: 1.2,
+    isResizable: true,
+    resizeAxis: 'both',
+    minWidth: 0.5,
+    minHeight: 0.2
+  },
+  {
+    id: 'elec-homerun',
+    name: 'Home Run',
+    category: 'Electrical',
+    description: 'Circuit home run to the panel — broken line ending in an arrow, tagged with the circuit designation (properties.circuitLabel, e.g. "A3"). Rotate to point toward the panel.',
+    defaultWidth: 3,
+    defaultHeight: 0.6,
+    isResizable: true,
+    resizeAxis: 'x',
+    minWidth: 1.5
+  },
+  {
+    id: 'elec-switch-3way',
+    name: '3-Way Switch',
+    category: 'Electrical',
+    description: 'Single-pole, double-throw switch controlling a fixture from two locations (e.g. stairs, hallway)',
+    defaultWidth: 0.3,
+    defaultHeight: 0.3,
+    isResizable: false,
+    resizeAxis: 'none'
+  },
+  {
+    id: 'elec-switch-dimmer',
+    name: 'Dimmer Switch',
+    category: 'Electrical',
+    description: 'Dimming switch/control',
+    defaultWidth: 0.3,
+    defaultHeight: 0.3,
+    isResizable: false,
+    resizeAxis: 'none'
+  },
+
+  // ── LOW VOLTAGE ─────────────────────────────────────────────────────────
+  {
+    id: 'lv-data-jack',
+    name: 'Data / Ethernet Jack',
+    category: 'LowVoltage',
+    description: 'Structured Cat5e/Cat6 data outlet',
+    defaultWidth: 0.3,
+    defaultHeight: 0.3,
+    isResizable: false,
+    resizeAxis: 'none'
+  },
+  {
+    id: 'lv-coax-jack',
+    name: 'Coax Jack',
+    category: 'LowVoltage',
+    description: 'Coaxial (cable/satellite) outlet',
+    defaultWidth: 0.3,
+    defaultHeight: 0.3,
+    isResizable: false,
+    resizeAxis: 'none'
+  },
+  {
+    id: 'lv-panel',
+    name: 'Structured Wiring Panel',
+    category: 'LowVoltage',
+    description: 'Low-voltage distribution panel for data/AV/security home-run wiring',
+    defaultWidth: 1.5,
+    defaultHeight: 0.5,
+    isResizable: true,
+    resizeAxis: 'x',
+    minWidth: 1,
+    widthPresets: [1.33, 1.5, 2]
+  },
+  {
+    id: 'lv-security-keypad',
+    name: 'Security Keypad',
+    category: 'LowVoltage',
+    description: 'Wall-mounted security system keypad',
+    defaultWidth: 0.4,
+    defaultHeight: 0.4,
+    isResizable: false,
+    resizeAxis: 'none'
+  },
+  {
+    id: 'lv-camera',
+    name: 'Security Camera',
+    category: 'LowVoltage',
+    description: 'Wall or ceiling-mounted security camera',
+    defaultWidth: 0.6,
+    defaultHeight: 0.6,
+    isResizable: false,
+    resizeAxis: 'none'
+  },
+
+  // ── FIRE/SAFETY (additional) ───────────────────────────────────────────
+  {
+    id: 'co-alarm',
+    name: 'Carbon Monoxide Alarm',
+    category: 'Fire/Safety',
+    description: 'Dedicated CO alarm. IRC R315.3 — required outside each separate sleeping area in dwellings with fuel-burning appliances or an attached garage.',
+    defaultWidth: 0.5,
+    defaultHeight: 0.5,
+    isResizable: false,
+    resizeAxis: 'none'
+  },
+
+  // ── SITE (additional) ───────────────────────────────────────────────────
+  {
+    id: 'site-driveway',
+    name: 'Driveway',
+    category: 'Site',
+    description: 'Concrete or asphalt driveway — outline with control-joint lines',
+    defaultWidth: 20,
+    defaultHeight: 10,
+    isResizable: true,
+    resizeAxis: 'both',
+    minWidth: 8,
+    minHeight: 8,
+    widthPresets: [16, 20, 24]
+  },
+  {
+    id: 'site-fence',
+    name: 'Fence',
+    category: 'Site',
+    description: 'Property/yard fence line with posts',
+    defaultWidth: 20,
+    defaultHeight: 0.5,
+    isResizable: true,
+    resizeAxis: 'x',
+    minWidth: 3,
+    widthPresets: [10, 20, 40, 60]
+  },
+  {
+    id: 'site-retaining-wall',
+    name: 'Retaining Wall',
+    category: 'Site',
+    description: 'Site retaining wall — grade change at property edge or terracing',
+    defaultWidth: 15,
+    defaultHeight: 1,
+    isResizable: true,
+    resizeAxis: 'both',
+    minWidth: 3,
+    minHeight: 0.5,
+    widthPresets: [10, 15, 25, 40]
+  },
+  {
+    id: 'site-deck-patio',
+    name: 'Deck / Patio',
+    category: 'Site',
+    description: 'Exterior deck or paved patio area',
+    defaultWidth: 12,
+    defaultHeight: 10,
+    isResizable: true,
+    resizeAxis: 'both',
+    minWidth: 6,
+    minHeight: 6
+  },
+  {
+    id: 'site-water-service',
+    name: 'Water Service Line',
+    category: 'Site',
+    description: 'Underground water service line from the main/meter to the building',
+    defaultWidth: 20,
+    defaultHeight: 0.5,
+    isResizable: true,
+    resizeAxis: 'x',
+    minWidth: 3,
+    widthPresets: [10, 20, 40, 80]
+  },
+  {
+    id: 'site-sewer-lateral',
+    name: 'Sewer Lateral',
+    category: 'Site',
+    description: 'Underground sanitary sewer lateral from the building to the main/septic',
+    defaultWidth: 20,
+    defaultHeight: 0.5,
+    isResizable: true,
+    resizeAxis: 'x',
+    minWidth: 3,
+    widthPresets: [10, 20, 40, 80]
+  },
+  {
+    id: 'site-gas-service',
+    name: 'Gas Service Line',
+    category: 'Site',
+    description: 'Underground gas service line from the meter to the building',
+    defaultWidth: 20,
+    defaultHeight: 0.5,
+    isResizable: true,
+    resizeAxis: 'x',
+    minWidth: 3,
+    widthPresets: [10, 20, 40, 80]
+  },
+  {
+    id: 'site-electrical-service',
+    name: 'Electrical Service Point',
+    category: 'Site',
+    description: 'Point of utility connection — overhead service drop or underground lateral to the building',
+    defaultWidth: 1,
+    defaultHeight: 1,
+    isResizable: false,
+    resizeAxis: 'none'
+  },
+
+  // ── STRUCTURAL (additional) ────────────────────────────────────────────
+  {
+    id: 'structural-foundation-wall',
+    name: 'Foundation Wall (Poured Concrete)',
+    category: 'Structural',
+    description: 'Poured-concrete foundation stem wall, shown in plan',
+    defaultWidth: 10,
+    defaultHeight: 0.667,
+    isResizable: true,
+    resizeAxis: 'both',
+    minWidth: 2,
+    minHeight: 0.5,
+    widthPresets: [8, 10, 16, 24]
+  },
 ]
+
+// Single source of truth for "is this blox a wall" — derived so any new wall
+// blox is automatically picked up by wall-graph/gap-detection, opening-snap,
+// opening-clip, and overlap-exclusion logic without having to be manually
+// synced into a half-dozen hand-copied ID sets across the codebase.
+export const WALL_BLOX_IDS: ReadonlySet<string> = new Set(
+  BLOX_DEFINITIONS.filter(d => d.category === 'Walls').map(d => d.id)
+)
+
+// Same idea for openings — every door/window/cased-opening variant needs to
+// auto-snap to the nearest wall centerline and split it. Deriving this from
+// the category (instead of a hand-typed list) is what caught door-garage,
+// door-pocket and door-bifold silently missing wall-splitting.
+export const OPENING_BLOX_IDS: ReadonlySet<string> = new Set(
+  BLOX_DEFINITIONS.filter(d => d.category === 'Openings').map(d => d.id)
+)
 
 export function getBloxById(id: string): BloxDefinition | undefined {
   return BLOX_DEFINITIONS.find(b => b.id === id)
 }
 
 export const BLOX_CATEGORIES = [
+  'Demolition',
   'Walls',
   'Openings',
   'Stairs',
@@ -1971,11 +2667,17 @@ export const BLOX_CATEGORIES = [
   'Fire/Safety',
   'Elevation',
   'Site',
+  'Electrical',
+  'Mechanical',
+  'Plumbing',
+  'LowVoltage',
 ] as const
 
 export const FLOORPLAN_CATEGORIES = [
+  'Demolition',
   'Walls', 'Openings', 'Stairs', 'Fixtures', 'Furniture',
   'Casework', 'Structural', 'Site', 'Annotations', 'Fire/Safety',
+  'Electrical', 'Mechanical', 'Plumbing', 'LowVoltage',
 ] as const
 
 export const ELEVATION_CATEGORIES = [

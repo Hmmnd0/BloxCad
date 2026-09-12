@@ -1,10 +1,15 @@
 import React, { useRef, useCallback, useEffect, useState } from 'react'
-import { Stage, Layer, Rect, Line, Text as KText, Circle, Shape } from 'react-konva'
+import { Stage, Layer, Rect, Line, Text as KText, Circle, Shape, Group } from 'react-konva'
 import Konva from 'konva'
 import { GridLayer } from './GridLayer'
 import { UnderlayLayer, computeRenderSize } from './UnderlayLayer'
 import { ArcWallLayer } from './ArcWallLayer'
 import { ElementsLayer } from './ElementsLayer'
+import { WallOutlineLayer } from './WallOutlineLayer'
+import { WallCornerLayer } from './WallCornerLayer'
+import { snapWallCenterline } from '../../utils/snap'
+import { dimensionSnapPoints, nearestWallEdgePoint, resolveDimensions } from '../../utils/dimensionAnchors'
+import { JOINED_WALLS } from '../../utils/wallUnion'
 import { PreviewLayer } from './PreviewLayer'
 import { DimensionLayer } from './DimensionLayer'
 import { useStore, getPixelsPerFoot, getSnapFeet } from '../../store/useStore'
@@ -12,10 +17,10 @@ import { snapToGrid, pixelsToFeet, formatFeet, formatInches } from '../../utils/
 import { getActiveElements, getActiveDimensions } from '../../store/useStore'
 import { SCALES, Scale } from '../../types'
 import { getElementSnapPoints, nearestSnapPoint, edgeSnapThresholdFt, snapOpeningToWall, snapWallEndpoint, WallSnapResult } from '../../utils/snap'
-import { getBloxById } from '../../blox/definitions'
-import { registerStage, unregisterStage } from '../../utils/exportManager'
-import { ScaleBar } from './ScaleBar'
-import { LegendOverlay } from './LegendOverlay'
+import { getBloxById, OPENING_BLOX_IDS } from '../../blox/definitions'
+import { registerStage, unregisterStage, fitView } from '../../utils/exportManager'
+import { PlanNotesLayer } from './PlanNotesLayer'
+import { ZoomControl } from './ZoomControl'
 
 const ZOOM_SPEED = 1.1
 const MIN_ZOOM = 0.15
@@ -26,7 +31,9 @@ const WALL_THICKNESS: Record<string, number> = {
   'wall-interior': 0.375,
   'wall-cmu': 0.667,
 }
-const WALL_SNAP_BLOX_IDS = new Set(['cased-opening', 'window-single', 'window-double', 'door-single', 'door-double', 'door-sliding'])
+const CONDUIT_THICKNESS = 0.15
+const CIRCUIT_WIRE_HEIGHT = 1.2
+const WALL_SNAP_BLOX_IDS = OPENING_BLOX_IDS
 
 function constrainToOrthogonal(
   start: { x: number; y: number },
@@ -52,6 +59,10 @@ export function DrawingCanvas() {
   const [wallCursor, setWallCursor] = useState<{ x: number; y: number } | null>(null)
   const [diagWallStart, setDiagWallStart] = useState<{ x: number; y: number } | null>(null)
   const [diagWallCursor, setDiagWallCursor] = useState<{ x: number; y: number } | null>(null)
+  const [conduitStart, setConduitStart] = useState<{ x: number; y: number } | null>(null)
+  const [conduitCursor, setConduitCursor] = useState<{ x: number; y: number } | null>(null)
+  const [circuitWireStart, setCircuitWireStart] = useState<{ x: number; y: number } | null>(null)
+  const [circuitWireCursor, setCircuitWireCursor] = useState<{ x: number; y: number } | null>(null)
   const [polyVerts, setPolyVerts] = useState<{ x: number; y: number }[]>([])
   const [polyCursor, setPolyCursor] = useState<{ x: number; y: number } | null>(null)
   const [arcWallPhase, setArcWallPhase] = useState<0 | 1 | 2>(0)
@@ -95,6 +106,8 @@ export function DrawingCanvas() {
   const dimStartRef = useRef(dimStart);       dimStartRef.current = dimStart
   const wallStartRef = useRef(wallStart);     wallStartRef.current = wallStart
   const diagWallStartRef = useRef(diagWallStart); diagWallStartRef.current = diagWallStart
+  const conduitStartRef = useRef(conduitStart); conduitStartRef.current = conduitStart
+  const circuitWireStartRef = useRef(circuitWireStart); circuitWireStartRef.current = circuitWireStart
   const polyVertsRef = useRef(polyVerts); polyVertsRef.current = polyVerts
   const projectRef = useRef(project);         projectRef.current = project
   const placeRef = useRef(placeElement);      placeRef.current = placeElement
@@ -192,6 +205,8 @@ export function DrawingCanvas() {
         setDimStart(null); setDimCursor(null)
         setWallStart(null); setWallCursor(null)
         setDiagWallStart(null); setDiagWallCursor(null)
+        setConduitStart(null); setConduitCursor(null)
+        setCircuitWireStart(null); setCircuitWireCursor(null)
         setPolyVerts([]); setPolyCursor(null)
         rectDrawRef.current = null; setRectDraw(null)
         setArcWallPhase(0); setArcWallCenter(null); setArcWallStart(null); setArcWallCursor(null)
@@ -236,6 +251,8 @@ export function DrawingCanvas() {
         if (e.key === 'p' || e.key === 'P') useStore.getState().setActiveTool('polygon')
         if (e.key === 's' || e.key === 'S') useStore.getState().setActiveTool('rect')
         if (e.key === 'c' || e.key === 'C') useStore.getState().setActiveTool('arc-wall')
+        if (e.key === 'k' || e.key === 'K') useStore.getState().setActiveTool('conduit')
+        if (e.key === 'l' || e.key === 'L') useStore.getState().setActiveTool('circuit-wire')
 
         // R — rotate 90° (Shift+R = 45°)
         if (e.key === 'r' || e.key === 'R') useStore.getState().rotateSelected(e.shiftKey ? 45 : 90)
@@ -277,14 +294,43 @@ export function DrawingCanvas() {
 
   const getSnappedFeet = useCallback((pos: { x: number; y: number }, edgeSnap = false) => {
     const raw = screenToFeet(pos)
-    if (edgeSnap && projectRef.current) {
+    if ((edgeSnap || !!activeBloxRef.current) && projectRef.current) {
       const stageScale = stageRef.current?.scaleX() ?? 1
       const threshold = edgeSnapThresholdFt(pxPerFtRef.current, stageScale)
-      const nearest = nearestSnapPoint(raw, getElementSnapPoints(getActiveElements(useStore.getState())), threshold)
+      const visible=getActiveElements(useStore.getState()).filter(e=>!projectRef.current?.layers?.some(l=>l.id===e.layerId&&!l.visible))
+      if(activeToolRef.current==='dimension') {
+        // Dimension clicks prioritize the actual wall perimeter. This runs
+        // before the first endpoint is stored, so the initial left-click is
+        // anchored to the visible edge rather than a selection-box midpoint.
+        const edge=nearestWallEdgePoint(raw,visible,threshold)
+        if(edge)return edge
+      }
+      // Dimension endpoints/extension anchors are real drafting geometry. When
+      // placing a blox, include them in the same point-snap set so the cursor
+      // and the placed object's anchor land on the measured edge—not on the
+      // dimension text or its selection outline.
+      const includeDimensions=activeToolRef.current==='dimension'||!!activeBloxRef.current
+      const points=includeDimensions ? [...dimensionSnapPoints(visible),...getElementSnapPoints(visible.filter(e=>!JOINED_WALLS.has(e.bloxId)))] : getElementSnapPoints(visible)
+      const nearest = nearestSnapPoint(raw, points, threshold)
       if (nearest) return nearest
     }
     return { x: snapToGrid(raw.x, snapFeetRef.current), y: snapToGrid(raw.y, snapFeetRef.current) }
   }, [screenToFeet])
+
+  // ── Absolute zoom (ZoomControl presets) — zooms toward the viewport center ──
+  const setZoomAbsolute = useCallback((newScale: number) => {
+    const stage = stageRef.current
+    if (!stage) return
+    const oldScale = stage.scaleX()
+    const cx = stage.width() / 2
+    const cy = stage.height() / 2
+    const to = { x: (cx - stage.x()) / oldScale, y: (cy - stage.y()) / oldScale }
+    const newX = cx - to.x * newScale
+    const newY = cy - to.y * newScale
+    stage.scale({ x: newScale, y: newScale })
+    stage.position({ x: newX, y: newY })
+    setStageTransform(newX, newY, newScale)
+  }, [setStageTransform])
 
   // ── Wheel: two-finger scroll = pan, pinch (ctrlKey) = zoom ──────────────
   const handleWheel = useCallback((e: Konva.KonvaEventObject<WheelEvent>) => {
@@ -306,7 +352,7 @@ export function DrawingCanvas() {
     } else {
       stage.position({ x: stage.x() - e.evt.deltaX, y: stage.y() - e.evt.deltaY })
     }
-    // Debounce store sync — avoids React re-renders on every scroll tick
+    // Debounce store sync — avoids a full React re-render on every scroll tick.
     clearTimeout(wheelSyncTimerRef.current)
     wheelSyncTimerRef.current = setTimeout(() => {
       const s = stageRef.current
@@ -412,7 +458,17 @@ export function DrawingCanvas() {
         setWallSnap(null)
       }
     }
-    if (activeToolRef.current === 'dimension') setDimCursor(getSnappedFeet(pos, true))
+    if (activeToolRef.current === 'dimension') {
+      const snapped=getSnappedFeet(pos, true)
+      const start=dimStartRef.current
+      // Manual dimensions are orthogonal drafting dimensions. Once the first
+      // point is set, project the hover point onto the dominant axis so the
+      // preview line cannot drift diagonally.
+      if(start) {
+        const dx=Math.abs(snapped.x-start.x),dy=Math.abs(snapped.y-start.y)
+        setDimCursor(dx>=dy?{x:snapped.x,y:start.y}:{x:start.x,y:snapped.y})
+      } else setDimCursor(snapped)
+    }
     if (activeToolRef.current === 'wall') {
       const gridPt = getSnappedFeet(pos)
       if (wallStartRef.current) {
@@ -420,7 +476,7 @@ export function DrawingCanvas() {
         const stageScale = stageRef.current?.scaleX() ?? 1
         const threshFt = edgeSnapThresholdFt(pxPerFtRef.current, stageScale, 20)
         const constrained = constrainToOrthogonal(wallStartRef.current, gridPt)
-        setWallCursor(snapWallEndpoint(wallStartRef.current, constrained, elements, threshFt))
+        setWallCursor(snapWallCenterline(constrained, elements, threshFt, wallStartRef.current) ?? snapWallEndpoint(wallStartRef.current, constrained, elements, threshFt))
       } else {
         setWallCursor(gridPt)
       }
@@ -451,6 +507,41 @@ export function DrawingCanvas() {
         }
       } else {
         setDiagWallCursor(gridPt)
+      }
+    }
+    // Conduit tool — same free-angle two-click drawing as diagonal-wall,
+    // with the same optional shift-to-15°-increments snap.
+    if (activeToolRef.current === 'conduit') {
+      const gridPt = getSnappedFeet(pos)
+      if (conduitStartRef.current && e.evt.shiftKey) {
+        const dx = gridPt.x - conduitStartRef.current.x
+        const dy = gridPt.y - conduitStartRef.current.y
+        const len = Math.sqrt(dx * dx + dy * dy)
+        if (len > 0.01) {
+          const snapped = Math.round(Math.atan2(dy, dx) / (Math.PI / 12)) * (Math.PI / 12)
+          setConduitCursor({ x: conduitStartRef.current.x + len * Math.cos(snapped), y: conduitStartRef.current.y + len * Math.sin(snapped) })
+        } else {
+          setConduitCursor(gridPt)
+        }
+      } else {
+        setConduitCursor(gridPt)
+      }
+    }
+    // Circuit wire tool — same free-angle two-click drawing as conduit
+    if (activeToolRef.current === 'circuit-wire') {
+      const gridPt = getSnappedFeet(pos)
+      if (circuitWireStartRef.current && e.evt.shiftKey) {
+        const dx = gridPt.x - circuitWireStartRef.current.x
+        const dy = gridPt.y - circuitWireStartRef.current.y
+        const len = Math.sqrt(dx * dx + dy * dy)
+        if (len > 0.01) {
+          const snapped = Math.round(Math.atan2(dy, dx) / (Math.PI / 12)) * (Math.PI / 12)
+          setCircuitWireCursor({ x: circuitWireStartRef.current.x + len * Math.cos(snapped), y: circuitWireStartRef.current.y + len * Math.sin(snapped) })
+        } else {
+          setCircuitWireCursor(gridPt)
+        }
+      } else {
+        setCircuitWireCursor(gridPt)
       }
     }
   }, [setStageTransform, screenToFeet, getSnappedFeet])
@@ -536,6 +627,9 @@ export function DrawingCanvas() {
 
     // Underlay two-point calibration intercept
     if (underlayCalModeRef.current === 'two-point-picking') {
+      // Calibration points belong to the reference image, never to a placed
+      // dimension or blox beneath the cursor.
+      e.cancelBubble = true
       const stage = stageRef.current
       if (!stage) return
       const stageScale = stage.scaleX()
@@ -574,11 +668,11 @@ export function DrawingCanvas() {
       if (!wallStartRef.current) {
         // Snap start to nearest element corner/edge-midpoint
         const snapPts = getElementSnapPoints(elements)
-        const snapped = nearestSnapPoint(gridPt, snapPts, threshFt) ?? gridPt
+        const snapped = snapWallCenterline(gridPt, elements, threshFt) ?? nearestSnapPoint(gridPt, snapPts, threshFt) ?? gridPt
         setWallStart(snapped)
       } else {
         const constrained = constrainToOrthogonal(wallStartRef.current, gridPt)
-        const snapped = snapWallEndpoint(wallStartRef.current, constrained, elements, threshFt)
+        const snapped = snapWallCenterline(constrained, elements, threshFt, wallStartRef.current) ?? snapWallEndpoint(wallStartRef.current, constrained, elements, threshFt)
         const start = wallStartRef.current
         const dx = Math.abs(snapped.x - start.x)
         const dy = Math.abs(snapped.y - start.y)
@@ -608,7 +702,8 @@ export function DrawingCanvas() {
         setDimStart(snapped)
       } else {
         addDimension({ x1: dimStartRef.current.x, y1: dimStartRef.current.y,
-                       x2: snapped.x, y2: snapped.y, offset: DEFAULT_DIM_OFFSET })
+                       x2: snapped.x, y2: snapped.y, offset: DEFAULT_DIM_OFFSET,
+                       measurement: undefined })
         setDimStart(snapped)  // chain: next dim starts from this endpoint; ESC to finish
       }
       return
@@ -698,6 +793,60 @@ export function DrawingCanvas() {
       return
     }
 
+    // Conduit tool — two-click free-angle drawing, chainable like walls
+    if (activeToolRef.current === 'conduit') {
+      const gridPt = getSnappedFeet(pos)
+      if (!conduitStartRef.current) {
+        setConduitStart(gridPt)
+      } else {
+        const start = conduitStartRef.current
+        let dx = gridPt.x - start.x
+        let dy = gridPt.y - start.y
+        const rawLen = Math.sqrt(dx * dx + dy * dy)
+        if (rawLen < 0.25) return
+        if (e.evt.shiftKey) {
+          const snapped = Math.round(Math.atan2(dy, dx) / (Math.PI / 12)) * (Math.PI / 12)
+          dx = rawLen * Math.cos(snapped)
+          dy = rawLen * Math.sin(snapped)
+        }
+        const len = Math.sqrt(dx * dx + dy * dy)
+        const angleDeg = Math.atan2(dy, dx) * (180 / Math.PI)
+        const end = { x: start.x + dx, y: start.y + dy }
+        const cx = (start.x + end.x) / 2
+        const cy = (start.y + end.y) / 2
+        placeRef.current('elec-conduit', cx - len / 2, cy - CONDUIT_THICKNESS / 2, len, CONDUIT_THICKNESS, undefined, angleDeg)
+        setConduitStart(end)
+      }
+      return
+    }
+
+    // Circuit wire tool — two-click free-angle drawing, chainable like walls
+    if (activeToolRef.current === 'circuit-wire') {
+      const gridPt = getSnappedFeet(pos)
+      if (!circuitWireStartRef.current) {
+        setCircuitWireStart(gridPt)
+      } else {
+        const start = circuitWireStartRef.current
+        let dx = gridPt.x - start.x
+        let dy = gridPt.y - start.y
+        const rawLen = Math.sqrt(dx * dx + dy * dy)
+        if (rawLen < 0.25) return
+        if (e.evt.shiftKey) {
+          const snapped = Math.round(Math.atan2(dy, dx) / (Math.PI / 12)) * (Math.PI / 12)
+          dx = rawLen * Math.cos(snapped)
+          dy = rawLen * Math.sin(snapped)
+        }
+        const len = Math.sqrt(dx * dx + dy * dy)
+        const angleDeg = Math.atan2(dy, dx) * (180 / Math.PI)
+        const end = { x: start.x + dx, y: start.y + dy }
+        const cx = (start.x + end.x) / 2
+        const cy = (start.y + end.y) / 2
+        placeRef.current('elec-circuit-wire', cx - len / 2, cy - CIRCUIT_WIRE_HEIGHT / 2, len, CIRCUIT_WIRE_HEIGHT, undefined, angleDeg)
+        setCircuitWireStart(end)
+      }
+      return
+    }
+
     // Clear selection on background click; exit group isolation if active
     if (e.target !== e.target.getStage()) {
       useStore.getState().exitGroup()
@@ -754,7 +903,7 @@ export function DrawingCanvas() {
     ? { x: wallStart.x * pxPerFt, y: wallStart.y * pxPerFt }
     : null
 
-  const cursor = pickPointResolver || activeBloxId || activeTool === 'dimension' || activeTool === 'wall' || activeTool === 'rect' || activeTool === 'diagonal-wall' || activeTool === 'polygon' || activeTool === 'arc-wall'
+  const cursor = pickPointResolver || activeBloxId || activeTool === 'dimension' || activeTool === 'wall' || activeTool === 'rect' || activeTool === 'diagonal-wall' || activeTool === 'polygon' || activeTool === 'arc-wall' || activeTool === 'conduit' || activeTool === 'circuit-wire'
     ? 'crosshair'
     : activeTool === 'hand' || spaceHeld.current
     ? (isPanning.current ? 'grabbing' : 'grab')
@@ -797,6 +946,44 @@ export function DrawingCanvas() {
     ? { x: diagWallStart.x * pxPerFt, y: diagWallStart.y * pxPerFt }
     : null
 
+  const conduitPreview = activeTool === 'conduit' && conduitStart && conduitCursor
+    ? (() => {
+        const dx = conduitCursor.x - conduitStart.x
+        const dy = conduitCursor.y - conduitStart.y
+        const lenFt = Math.sqrt(dx * dx + dy * dy)
+        if (lenFt < 0.01) return null
+        const rawAngle = Math.atan2(dy, dx) * (180 / Math.PI)
+        const cx = (conduitStart.x + conduitCursor.x) / 2 * pxPerFt
+        const cy = (conduitStart.y + conduitCursor.y) / 2 * pxPerFt
+        const normalAngle = ((rawAngle % 180) + 180) % 180
+        const dispAngle = Math.round(normalAngle > 90 ? 180 - normalAngle : normalAngle)
+        return { cx, cy, lenPx: lenFt * pxPerFt, tPx: CONDUIT_THICKNESS * pxPerFt, angleDeg: rawAngle, lenFt, dispAngle }
+      })()
+    : null
+
+  const conduitStartDot = activeTool === 'conduit' && conduitStart
+    ? { x: conduitStart.x * pxPerFt, y: conduitStart.y * pxPerFt }
+    : null
+
+  const circuitWirePreview = activeTool === 'circuit-wire' && circuitWireStart && circuitWireCursor
+    ? (() => {
+        const dx = circuitWireCursor.x - circuitWireStart.x
+        const dy = circuitWireCursor.y - circuitWireStart.y
+        const lenFt = Math.sqrt(dx * dx + dy * dy)
+        if (lenFt < 0.01) return null
+        const rawAngle = Math.atan2(dy, dx) * (180 / Math.PI)
+        const cx = (circuitWireStart.x + circuitWireCursor.x) / 2 * pxPerFt
+        const cy = (circuitWireStart.y + circuitWireCursor.y) / 2 * pxPerFt
+        const normalAngle = ((rawAngle % 180) + 180) % 180
+        const dispAngle = Math.round(normalAngle > 90 ? 180 - normalAngle : normalAngle)
+        return { cx, cy, lenPx: lenFt * pxPerFt, tPx: CIRCUIT_WIRE_HEIGHT * pxPerFt, angleDeg: rawAngle, lenFt, dispAngle }
+      })()
+    : null
+
+  const circuitWireStartDot = activeTool === 'circuit-wire' && circuitWireStart
+    ? { x: circuitWireStart.x * pxPerFt, y: circuitWireStart.y * pxPerFt }
+    : null
+
   const rectPreview = rectDraw ? {
     x: Math.min(rectDraw.startFt.x, rectDraw.endFt.x) * pxPerFt,
     y: Math.min(rectDraw.startFt.y, rectDraw.endFt.y) * pxPerFt,
@@ -824,9 +1011,12 @@ export function DrawingCanvas() {
         <GridLayer pixelsPerFoot={pxPerFt} mode={project?.mode ?? 'floorplan'} />
         <UnderlayLayer pixelsPerFoot={pxPerFt} />
         <ArcWallLayer pixelsPerFoot={pxPerFt} />
+        <WallOutlineLayer pixelsPerFoot={pxPerFt} phase="fill" />
         <ElementsLayer pixelsPerFoot={pxPerFt} snapFeet={scale.snapFeet} toolActive={activeTool} />
+        <WallOutlineLayer pixelsPerFoot={pxPerFt} />
+        <WallCornerLayer pixelsPerFoot={pxPerFt} snapFeet={scale.snapFeet} />
         <DimensionLayer
-          dimensions={project.mode === 'detail' ? (project.detailDimensions ?? []) : project.dimensions}
+          dimensions={project.mode === 'detail' ? (project.detailDimensions ?? []) : resolveDimensions(project.dimensions,project.elements)}
           selectedDimIds={selectedDimIds}
           pixelsPerFoot={pxPerFt}
           mode={project.mode}
@@ -839,6 +1029,15 @@ export function DrawingCanvas() {
           }
           previewOffset={DEFAULT_DIM_OFFSET}
         />
+        {activeTool === 'dimension' && !dimStart && dimCursor && (
+          <Layer listening={false}>
+            <Group>
+              <Circle x={dimCursor.x * pxPerFt} y={dimCursor.y * pxPerFt} radius={6} stroke="#4F9EFF" strokeWidth={1.5} />
+              <Line points={[dimCursor.x * pxPerFt - 10, dimCursor.y * pxPerFt, dimCursor.x * pxPerFt + 10, dimCursor.y * pxPerFt]} stroke="#4F9EFF" strokeWidth={1} />
+              <Line points={[dimCursor.x * pxPerFt, dimCursor.y * pxPerFt - 10, dimCursor.x * pxPerFt, dimCursor.y * pxPerFt + 10]} stroke="#4F9EFF" strokeWidth={1} />
+            </Group>
+          </Layer>
+        )}
         {activeBloxId && previewPos && (
           <PreviewLayer
             bloxId={activeBloxId}
@@ -847,6 +1046,7 @@ export function DrawingCanvas() {
             pixelsPerFoot={pxPerFt}
             widthOverride={wallSnap?.widthOverride ?? pendingBloxWidth ?? undefined}
             heightOverride={wallSnap?.heightOverride}
+            rotation={wallSnap?.rotation}
           />
         )}
 
@@ -938,6 +1138,105 @@ export function DrawingCanvas() {
                 <Line
                   points={[diagWallStartDot.x, diagWallStartDot.y - 8 / stageScale, diagWallStartDot.x, diagWallStartDot.y + 8 / stageScale]}
                   stroke="#4F9EFF" strokeWidth={1.5 / stageScale}
+                />
+              </>
+            )}
+          </Layer>
+        )}
+
+        {/* Conduit preview — same mechanic as diagonal wall, electrical-gold to distinguish */}
+        {(conduitPreview || conduitStartDot) && (
+          <Layer listening={false}>
+            {conduitPreview && (
+              <>
+                <Rect
+                  x={conduitPreview.cx}
+                  y={conduitPreview.cy}
+                  width={conduitPreview.lenPx}
+                  height={conduitPreview.tPx}
+                  offsetX={conduitPreview.lenPx / 2}
+                  offsetY={conduitPreview.tPx / 2}
+                  rotation={conduitPreview.angleDeg}
+                  fill="rgba(184,134,11,0.35)"
+                  stroke="#B8860B"
+                  strokeWidth={1}
+                />
+                <KText
+                  text={`${project.mode === 'detail' ? formatInches(conduitPreview.lenFt) : formatFeet(conduitPreview.lenFt)} @ ${conduitPreview.dispAngle}°`}
+                  x={conduitPreview.cx}
+                  y={conduitPreview.cy - 20 / stageScale}
+                  offsetX={30 / stageScale}
+                  fontSize={Math.max(10, 13 / stageScale)}
+                  fontFamily="sans-serif"
+                  fill="#B8860B"
+                  stroke="rgba(0,0,0,0.6)"
+                  strokeWidth={2 / stageScale}
+                  fillAfterStrokeEnabled
+                  listening={false}
+                />
+              </>
+            )}
+            {conduitStartDot && (
+              <>
+                <Line
+                  points={[conduitStartDot.x - 8 / stageScale, conduitStartDot.y, conduitStartDot.x + 8 / stageScale, conduitStartDot.y]}
+                  stroke="#B8860B" strokeWidth={1.5 / stageScale}
+                />
+                <Line
+                  points={[conduitStartDot.x, conduitStartDot.y - 8 / stageScale, conduitStartDot.x, conduitStartDot.y + 8 / stageScale]}
+                  stroke="#B8860B" strokeWidth={1.5 / stageScale}
+                />
+              </>
+            )}
+          </Layer>
+        )}
+
+        {/* Circuit wire preview — curved dashed line, matching the placed-element render */}
+        {(circuitWirePreview || circuitWireStartDot) && (
+          <Layer listening={false}>
+            {circuitWirePreview && (
+              <Group
+                x={circuitWirePreview.cx}
+                y={circuitWirePreview.cy}
+                rotation={circuitWirePreview.angleDeg}
+              >
+                <Shape
+                  sceneFunc={(ctx, shape) => {
+                    const halfLen = circuitWirePreview.lenPx / 2
+                    const halfT = circuitWirePreview.tPx / 2
+                    ctx.beginPath()
+                    ctx.moveTo(-halfLen, halfT * 0.7)
+                    ctx.quadraticCurveTo(0, -halfT, halfLen, halfT * 0.7)
+                    ctx.strokeShape(shape)
+                  }}
+                  stroke="#B8860B"
+                  strokeWidth={1.5 / stageScale}
+                  dash={[6 / stageScale, 4 / stageScale]}
+                />
+                <KText
+                  text={`${project.mode === 'detail' ? formatInches(circuitWirePreview.lenFt) : formatFeet(circuitWirePreview.lenFt)} @ ${circuitWirePreview.dispAngle}°`}
+                  x={0}
+                  y={-circuitWirePreview.tPx / 2 - 20 / stageScale}
+                  offsetX={30 / stageScale}
+                  fontSize={Math.max(10, 13 / stageScale)}
+                  fontFamily="sans-serif"
+                  fill="#B8860B"
+                  stroke="rgba(0,0,0,0.6)"
+                  strokeWidth={2 / stageScale}
+                  fillAfterStrokeEnabled
+                  listening={false}
+                />
+              </Group>
+            )}
+            {circuitWireStartDot && (
+              <>
+                <Line
+                  points={[circuitWireStartDot.x - 8 / stageScale, circuitWireStartDot.y, circuitWireStartDot.x + 8 / stageScale, circuitWireStartDot.y]}
+                  stroke="#B8860B" strokeWidth={1.5 / stageScale}
+                />
+                <Line
+                  points={[circuitWireStartDot.x, circuitWireStartDot.y - 8 / stageScale, circuitWireStartDot.x, circuitWireStartDot.y + 8 / stageScale]}
+                  stroke="#B8860B" strokeWidth={1.5 / stageScale}
                 />
               </>
             )}
@@ -1085,14 +1384,14 @@ export function DrawingCanvas() {
             />
           </Layer>
         )}
+        <PlanNotesLayer project={project} legend={useStore.getState().showLegend}/>
       </Stage>
-      <ScaleBar scale={project.scale as Scale} pixelsPerFoot={pxPerFt} />
-      <LegendOverlay />
+      <ZoomControl stageScale={stageScale} onSetZoom={setZoomAbsolute} onFit={() => { void fitView() }} />
       <div
         ref={cursorReadoutRef}
         style={{
           display: 'none',
-          position: 'absolute', bottom: 8, right: 8,
+          position: 'absolute', bottom: 70, right: 18,
           background: 'rgba(0,0,0,0.72)', color: '#fff',
           fontFamily: '"SF Mono", "Fira Code", monospace',
           fontSize: 11, padding: '4px 8px', borderRadius: 4,

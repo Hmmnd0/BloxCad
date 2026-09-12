@@ -14,9 +14,18 @@ export const SCALES: Record<Scale, ScaleConfig> = {
 
 export type DrawingMode = 'floorplan' | 'elevation' | 'detail'
 
-export type Tool = 'select' | 'hand' | 'dimension' | 'wall' | 'rect' | 'diagonal-wall' | 'polygon' | 'arc-wall'
+export type Tool = 'select' | 'hand' | 'dimension' | 'wall' | 'rect' | 'diagonal-wall' | 'polygon' | 'arc-wall' | 'conduit' | 'circuit-wire'
 export type WallType = 'wall-exterior' | 'wall-interior' | 'wall-cmu'
 
+export interface WallFaceReference {
+  wallId: string
+  side: 'left' | 'right' | 'top' | 'bottom'
+  inset: number // fraction of the wall's short dimension (0.3 for a footing stem)
+}
+export interface DimensionAnchor {
+  regionKey: string
+  faces: [WallFaceReference, WallFaceReference]
+}
 export interface DimensionLine {
   id: string
   x1: number  // start measured point, feet
@@ -24,9 +33,15 @@ export interface DimensionLine {
   x2: number  // end measured point, feet
   y2: number
   offset: number  // feet from reference edge to dim line (positive = above/left)
+  measurement?: 'horizontal' | 'vertical' | 'aligned'
+  anchor1?: DimensionAnchor
+  anchor2?: DimensionAnchor
+  needsReview?: boolean
+  overall?: { wallIds: string[]; direction: 'up' | 'down' | 'left' | 'right' }
 }
 
 export type BloxCategory =
+  | 'Demolition'
   | 'Walls'
   | 'Openings'
   | 'Stairs'
@@ -39,6 +54,10 @@ export type BloxCategory =
   | 'Fire/Safety'
   | 'Elevation'
   | 'Site'
+  | 'Electrical'
+  | 'Mechanical'
+  | 'Plumbing'
+  | 'LowVoltage'
 
 export interface Layer {
   id: string
@@ -102,6 +121,10 @@ export interface PlacedElement {
   locked: boolean
   layerId?: string
   groupId?: string
+  /** Opening center distance from its host wall's start, in model units. */
+  wallHost?: { wallId: string; offset: number }
+  /** Stored extension beyond each editable wall centerline endpoint. */
+  wallEndPadding?: number
 }
 
 export interface ArcWall {
@@ -136,6 +159,7 @@ export interface ChecklistItem {
 export type UnderlayCalibration =
   | { method: 'simple'; realWidthFt: number }
   | { method: 'two-point'; p1px: { x: number; y: number }; p2px: { x: number; y: number }; realDistFt: number }
+  | { method: 'multi-point'; pairs: Array<{ p1px:{x:number;y:number}; p2px:{x:number;y:number}; realDistFt:number }>; pixelsPerFoot:number; residualFt:number }
 
 export interface Underlay {
   imageData: string        // base64 data URI
@@ -144,10 +168,13 @@ export interface Underlay {
   opacity: number          // 0.1–1.0
   visible: boolean
   calibration: UnderlayCalibration | null
+  /** Similarity transform from image pixels into canvas feet. */
+  registration?: { scaleFtPerPx: number; rotationDeg: number; originPx: {x:number;y:number}; originFt: {x:number;y:number} }
   description?: string     // user-written note about what's in the image (helps AI interpretation)
 }
 
 export interface Project {
+  permitData?: import('../utils/permitSheet').PermitData
   id: string
   name: string
   scale: Scale
@@ -162,4 +189,12 @@ export interface Project {
   groups?: ElementGroup[]
   underlay?: Underlay
   arcWalls?: ArcWall[]
+  /** Named elevation datums used by MCP and elevation annotations. */
+  elevationDatums?: Record<string, number>
+  /** Minimum building-to-property-line setback for DRC zoning check, per property-line role.
+   *  Property-line elements are tagged via properties.lineType ('front'|'side'|'rear'); untagged
+   *  lines default to 'side'. Legacy projects may still carry the old single zoningSetbackFt. */
+  zoningSetbacks?: { front: number; side: number; rear: number }
+  /** @deprecated superseded by zoningSetbacks — read as a fallback for projects saved before the split */
+  zoningSetbackFt?: number
 }

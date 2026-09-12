@@ -1,7 +1,8 @@
 import React, { useRef, useState, useEffect, useCallback } from 'react'
-import { MousePointer2, Hand, PenLine, Ruler, Square, ChevronRight, Pentagon, Slash } from 'lucide-react'
+import { MousePointer2, Hand, PenLine, Ruler, Square, ChevronRight, Pentagon, Slash, Zap, Spline } from 'lucide-react'
 import { Tool, WallType } from '../../types'
 import { useStore } from '../../store/useStore'
+import { CadToolIcon } from './CadToolIcon'
 
 const ArcIcon = () => (
   <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
@@ -26,9 +27,11 @@ const WALL_OPTIONS: { type: WallType; label: string; description: string }[] = [
 const TOOLS: ToolDef[] = [
   { id: 'select',    label: 'Select',    shortcut: 'V', icon: <MousePointer2 size={18} strokeWidth={1.5} /> },
   { id: 'hand',      label: 'Pan',       shortcut: 'H', icon: <Hand          size={18} strokeWidth={1.5} /> },
-  { id: 'wall',      label: 'Wall',      shortcut: 'W', icon: <PenLine       size={18} strokeWidth={1.5} /> },
+  { id: 'wall',      label: 'Wall',      shortcut: 'W', icon: <CadToolIcon kind="wall" /> },
+  { id: 'conduit',   label: 'Conduit',   shortcut: 'K', icon: <CadToolIcon kind="conduit" /> },
+  { id: 'circuit-wire', label: 'Circuit Wire', shortcut: 'L', icon: <CadToolIcon kind="circuit" /> },
   { id: 'polygon',   label: 'Polygon',   shortcut: 'P', icon: <Pentagon      size={18} strokeWidth={1.5} /> },
-  { id: 'dimension', label: 'Dimension', shortcut: 'D', icon: <Ruler         size={18} strokeWidth={1.5} /> },
+  { id: 'dimension', label: 'Dimension', shortcut: 'D', icon: <CadToolIcon kind="dimension" /> },
   { id: 'rect',      label: 'Rectangle', shortcut: 'S', icon: <Square        size={18} strokeWidth={1.5} /> },
 ]
 
@@ -72,7 +75,7 @@ function WallFlyout({ activeWallType, isDiagonalMode, isArcMode, onSelectType, o
             }
           `}
         >
-          <PenLine size={14} strokeWidth={1.5} className="shrink-0" />
+          <CadToolIcon kind="wall" />
           <div>
             <div className="font-medium leading-tight">{opt.label}</div>
             <div className="text-[10px] opacity-60 leading-tight">{opt.description}</div>
@@ -174,6 +177,9 @@ function ToolButton({ tool, active, activeWallType, isDiagonalMode, isArcMode, o
     <div className="relative">
       <button
         onClick={handleClick}
+        aria-label={`${wallLabel} (${isArcMode && isWall ? 'C' : tool.shortcut})`}
+        aria-pressed={active}
+        onKeyDown={e => { if (isWall && e.key === 'ArrowRight') { e.preventDefault(); openFlyout() } if (e.key === 'Escape') closeFlyout() }}
         onPointerDown={handlePointerDown}
         onPointerUp={handlePointerUp}
         onPointerLeave={handlePointerUp}
@@ -183,7 +189,7 @@ function ToolButton({ tool, active, activeWallType, isDiagonalMode, isArcMode, o
           : `${tool.label} (${tool.shortcut})`
         }
         className={`
-          relative flex flex-col items-center justify-center w-9 h-9 rounded transition-all
+          cad-tool-button relative flex flex-col items-center justify-center w-9 h-9 rounded transition-all
           ${active
             ? 'bg-accent text-white'
             : 'text-gray-400 hover:bg-sidebar-hover hover:text-gray-200'
@@ -219,10 +225,10 @@ export function LeftToolbar() {
   const isDiagonalMode = activeTool === 'diagonal-wall'
   const isArcMode = activeTool === 'arc-wall'
   const isElevation = (project?.mode ?? 'floorplan') === 'elevation'
-  const visibleTools = isElevation ? TOOLS.filter(t => t.id !== 'wall') : TOOLS
+  const visibleTools = isElevation ? TOOLS.filter(t => t.id !== 'wall' && t.id !== 'conduit' && t.id !== 'circuit-wire') : TOOLS
 
   return (
-    <div className="flex flex-col items-center gap-1 py-2 px-1 w-11 bg-sidebar border-r border-gray-700 shrink-0">
+    <div className="drawing-tools flex flex-col items-center gap-1 py-2 px-1 w-11 bg-sidebar border-r border-gray-700 shrink-0" aria-label="Drawing tools">
       {visibleTools.map(tool => (
         <ToolButton
           key={tool.id}
